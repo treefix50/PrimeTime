@@ -18,7 +18,7 @@ func main() {
 	var (
 		root = flag.String("root", "./media", "media root directory")
 		addr = flag.String("addr", ":8080", "listen address")
-		db   = flag.String("db", defaultDBPath(), "sqlite database path (env PRIMETIME_DB)")
+		db   = flag.String("db", defaultDBPath(), "sqlite database path")
 	)
 	flag.Parse()
 
@@ -61,10 +61,7 @@ func main() {
 }
 
 func defaultDBPath() string {
-	if value := os.Getenv("PRIMETIME_DB"); value != "" {
-		return value
-	}
-	return "data/primetime.db"
+	return "./data/primetime.db"
 }
 
 func ensureDBDir(path string) error {
