@@ -96,7 +96,17 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, s.lib.All())
+	if s.lib.store == nil {
+		writeJSON(w, s.lib.All())
+		return
+	}
+
+	items, err := s.lib.store.GetAll()
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, items)
 }
 
 // Routes under /items/{id}[/{action}...]
@@ -119,7 +129,18 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		action = parts[1]
 	}
 
-	item, ok := s.lib.Get(id)
+	var item MediaItem
+	var ok bool
+	if s.lib.store == nil {
+		item, ok = s.lib.Get(id)
+	} else {
+		var err error
+		item, ok, err = s.lib.store.GetByID(id)
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
 	if !ok {
 		http.NotFound(w, r)
 		return
