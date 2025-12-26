@@ -35,9 +35,19 @@ func NewLibrary(root string, store MediaStore) (*Library, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
+	items := map[string]MediaItem{}
+	if store != nil {
+		storedItems, err := store.GetAll()
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range storedItems {
+			items[item.ID] = item
+		}
+	}
 	return &Library{
 		root:  root,
-		items: map[string]MediaItem{},
+		items: items,
 		store: store,
 	}, nil
 }
