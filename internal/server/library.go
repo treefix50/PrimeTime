@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -39,9 +40,11 @@ func NewLibrary(root string) (*Library, error) {
 
 func (l *Library) Scan() error {
 	found := map[string]MediaItem{}
+	var scanErrs []error
 
 	err := filepath.WalkDir(l.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			scanErrs = append(scanErrs, err)
 			return nil // skip unreadable entries
 		}
 		if d.IsDir() {
@@ -56,6 +59,7 @@ func (l *Library) Scan() error {
 
 		info, err := d.Info()
 		if err != nil {
+			scanErrs = append(scanErrs, err)
 			return nil
 		}
 
@@ -81,6 +85,9 @@ func (l *Library) Scan() error {
 	l.mu.Lock()
 	l.items = found
 	l.mu.Unlock()
+	if len(scanErrs) > 0 {
+		return errors.Join(scanErrs...)
+	}
 	return nil
 }
 
