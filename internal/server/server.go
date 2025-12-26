@@ -3,15 +3,20 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 )
 
+const scanInterval = 10 * time.Minute
+
 type Server struct {
-	addr string
-	lib  *Library
-	http *http.Server
+	addr       string
+	lib        *Library
+	http       *http.Server
+	scanTicker *time.Ticker
+	scanStop   chan struct{}
 }
 
 func New(root, addr string) (*Server, error) {
@@ -30,6 +35,13 @@ func New(root, addr string) (*Server, error) {
 		addr: addr,
 		lib:  lib,
 	}
+
+	if scanInterval > 0 {
+		s.scanTicker = time.NewTicker(scanInterval)
+		s.scanStop = make(chan struct{})
+		go s.runScanTicker()
+	}
+
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/library", s.handleLibrary)
 	mux.HandleFunc("/items/", s.handleItems)
@@ -45,9 +57,32 @@ func New(root, addr string) (*Server, error) {
 func (s *Server) Start() error { return s.http.ListenAndServe() }
 
 func (s *Server) Close() error {
+	s.stopScanTicker()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	return s.http.Shutdown(ctx)
+}
+
+func (s *Server) runScanTicker() {
+	for {
+		select {
+		case <-s.scanTicker.C:
+			if err := s.lib.Scan(); err != nil {
+				log.Printf("periodic scan failed: %v", err)
+			}
+		case <-s.scanStop:
+			s.scanTicker.Stop()
+			return
+		}
+	}
+}
+
+func (s *Server) stopScanTicker() {
+	if s.scanStop == nil {
+		return
+	}
+	close(s.scanStop)
+	s.scanStop = nil
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
