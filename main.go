@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/treefix50/primetime/internal/ffmpeg"
 	"github.com/treefix50/primetime/internal/server"
 )
 
@@ -17,12 +19,22 @@ func main() {
 	)
 	flag.Parse()
 
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ff, err := ffmpeg.Ensure(context.Background(), wd)
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("ffmpeg: %s\n", ff)
+
 	s, err := server.New(*root, *addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// graceful-ish stop
 	go func() {
 		ch := make(chan os.Signal, 1)
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
