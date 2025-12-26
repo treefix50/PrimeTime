@@ -121,12 +121,27 @@ func ParseNFOFile(path string) (*NFO, error) {
 // detectRootName extracts the root XML element name from a .nfo file.
 func detectRootName(data []byte) string {
 	s := strings.TrimSpace(string(data))
+	if strings.HasPrefix(s, "\ufeff") {
+		s = strings.TrimPrefix(s, "\ufeff")
+		s = strings.TrimSpace(s)
+	}
 
 	// strip XML header
 	if strings.HasPrefix(s, "<?xml") {
 		if i := strings.Index(s, "?>"); i >= 0 {
 			s = strings.TrimSpace(s[i+2:])
 		}
+	}
+
+	for {
+		s = strings.TrimSpace(s)
+		if strings.HasPrefix(s, "<!--") {
+			if i := strings.Index(s, "-->"); i >= 0 {
+				s = s[i+3:]
+				continue
+			}
+		}
+		break
 	}
 
 	// expect <root ...>
