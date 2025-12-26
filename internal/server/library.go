@@ -26,15 +26,19 @@ type Library struct {
 	root  string
 	mu    sync.RWMutex
 	items map[string]MediaItem
+	store MediaStore
+	// lastScan tracks the time the library last completed a scan.
+	lastScan time.Time
 }
 
-func NewLibrary(root string) (*Library, error) {
+func NewLibrary(root string, store MediaStore) (*Library, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
 	return &Library{
 		root:  root,
 		items: map[string]MediaItem{},
+		store: store,
 	}, nil
 }
 
@@ -93,8 +97,21 @@ func (l *Library) Scan() error {
 	}
 
 	l.mu.Lock()
+	previous := l.items
+	lastScan := l.lastScan
 	l.items = found
+	l.lastScan = time.Now()
 	l.mu.Unlock()
+
+	if l.store != nil {
+		itemsToSave := diffItems(found, previous, lastScan)
+		if len(itemsToSave) > 0 {
+			if err := l.store.SaveItems(itemsToSave); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
+	}
+
 	if len(scanErrs) > 0 {
 		return errors.Join(scanErrs...)
 	}
@@ -102,6 +119,14 @@ func (l *Library) Scan() error {
 }
 
 func (l *Library) All() []MediaItem {
+	if l.store != nil {
+		dbItems, err := l.store.GetAll()
+		if err == nil {
+			cacheItems := l.snapshotItems()
+			return mergeItems(dbItems, cacheItems)
+		}
+	}
+
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -114,10 +139,71 @@ func (l *Library) All() []MediaItem {
 }
 
 func (l *Library) Get(id string) (MediaItem, bool) {
+	if l.store != nil {
+		item, ok, err := l.store.GetByID(id)
+		if err == nil && ok {
+			return item, true
+		}
+	}
+
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	it, ok := l.items[id]
 	return it, ok
+}
+
+func (l *Library) snapshotItems() []MediaItem {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	out := make([]MediaItem, 0, len(l.items))
+	for _, item := range l.items {
+		out = append(out, item)
+	}
+	return out
+}
+
+func mergeItems(dbItems, cacheItems []MediaItem) []MediaItem {
+	merged := make(map[string]MediaItem, len(dbItems)+len(cacheItems))
+	for _, item := range dbItems {
+		merged[item.ID] = item
+	}
+	for _, item := range cacheItems {
+		merged[item.ID] = item
+	}
+	out := make([]MediaItem, 0, len(merged))
+	for _, item := range merged {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	return out
+}
+
+func diffItems(found, previous map[string]MediaItem, lastScan time.Time) []MediaItem {
+	if lastScan.IsZero() {
+		out := make([]MediaItem, 0, len(found))
+		for _, item := range found {
+			out = append(out, item)
+		}
+		return out
+	}
+
+	out := make([]MediaItem, 0, len(found))
+	for id, item := range found {
+		prev, ok := previous[id]
+		if !ok || !mediaItemEqual(item, prev) {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func mediaItemEqual(a, b MediaItem) bool {
+	return a.ID == b.ID &&
+		a.Title == b.Title &&
+		a.VideoPath == b.VideoPath &&
+		a.NFOPath == b.NFOPath &&
+		a.Size == b.Size &&
+		a.Modified.Equal(b.Modified)
 }
 
 func guessNFOPath(videoPath string) string {

@@ -19,8 +19,8 @@ type Server struct {
 	scanStop   chan struct{}
 }
 
-func New(root, addr string) (*Server, error) {
-	lib, err := NewLibrary(root)
+func New(root, addr string, store MediaStore) (*Server, error) {
+	lib, err := NewLibrary(root, store)
 	if err != nil {
 		return nil, err
 	}
