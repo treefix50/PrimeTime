@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/DEINUSER/primetime/internal/server"
+	"github.com/treefix50/primetime/internal/server"
 )
 
 func main() {
