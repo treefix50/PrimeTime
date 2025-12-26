@@ -4,7 +4,7 @@ import "fmt"
 
 const schemaMediaItems = `
 CREATE TABLE IF NOT EXISTS media_items (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	id TEXT PRIMARY KEY,
 	path TEXT NOT NULL,
 	title TEXT,
 	size INTEGER,
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS media_items (
 
 const schemaNFO = `
 CREATE TABLE IF NOT EXISTS nfo (
-	media_id INTEGER NOT NULL,
+	media_id TEXT NOT NULL PRIMARY KEY,
 	type TEXT,
 	title TEXT,
 	original_title TEXT,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS nfo (
 	episode INTEGER,
 	show_title TEXT,
 	raw_root TEXT,
-	FOREIGN KEY (media_id) REFERENCES media_items(id)
+	FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
 );`
 
 func (s *Store) EnsureSchema() error {

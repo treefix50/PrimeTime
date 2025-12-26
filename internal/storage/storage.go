@@ -26,7 +26,13 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
-	return &Store{db: db}, nil
+	store := &Store{db: db}
+	if err := store.EnsureSchema(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	return store, nil
 }
 
 func (s *Store) Close() error {
