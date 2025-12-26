@@ -41,6 +41,16 @@ func NewLibrary(root string) (*Library, error) {
 func (l *Library) Scan() error {
 	found := map[string]MediaItem{}
 	var scanErrs []error
+	allowedExtensions := map[string]bool{
+		".avi":  true,
+		".m2ts": true,
+		".m4v":  true,
+		".mkv":  true,
+		".mov":  true,
+		".mp4":  true,
+		".ts":   true,
+		".webm": true,
+	}
 
 	err := filepath.WalkDir(l.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -52,7 +62,7 @@ func (l *Library) Scan() error {
 		}
 
 		ext := strings.ToLower(filepath.Ext(d.Name()))
-		if ext != ".mkv" && ext != ".mp4" && ext != ".m4v" && ext != ".avi" {
+		if !allowedExtensions[ext] {
 			// minimal: video types; mkv requested; others optional
 			return nil
 		}
