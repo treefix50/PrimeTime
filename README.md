@@ -8,3 +8,12 @@ Es gibt kein Web-Interface, keine Datenbank und keine Authentifizierung.
 
 ```bash
 go run . -root ./media -addr :8080
+```
+
+Kurze Befehle:
+
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/library
+curl -I http://localhost:8080/items/{id}/stream
+```
