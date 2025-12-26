@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+# downloaded ffmpeg
+tools/ffmpeg/*.exe
+tools/ffmpeg/*.dll
+tools/ffmpeg/*.zip
+tools/ffmpeg/checksums.sha256
