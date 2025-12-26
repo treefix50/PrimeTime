@@ -7,11 +7,13 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 ## Start
 
 ```bash
-go run . -root ./media -addr :8080 -db ./data/primetime.db
+./run.ps1 -root ./media -addr :8080 -db ./data/primetime.db
 ```
 
 Standardmäßig nutzt PrimeTime eine SQLite-Datenbank unter `./data/primetime.db`.
 Der Pfad lässt sich mit `-db` anpassen (z. B. `-db :memory:`).
+
+Statt `go run .` sollte das Skript `./run.ps1` genutzt werden.
 
 Kurze Befehle:
 
