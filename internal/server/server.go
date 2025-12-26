@@ -61,11 +61,10 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	items := s.lib.All()
-	writeJSON(w, items)
+	writeJSON(w, s.lib.All())
 }
 
-// Routes under /items/{id}[/{action}]
+// Routes under /items/{id}[/{action}...]
 func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -74,13 +73,14 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 	path := strings.TrimPrefix(r.URL.Path, "/items/")
 	parts := strings.Split(path, "/")
-	if len(parts) == 0 || parts[0] == "" {
+	if len(parts) < 1 || parts[0] == "" {
 		http.NotFound(w, r)
 		return
 	}
+
 	id := parts[0]
 	action := ""
-	if len(parts) > 1 {
+	if len(parts) >= 2 {
 		action = parts[1]
 	}
 
@@ -92,30 +92,26 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "":
+		// /items/{id}
 		writeJSON(w, item)
 
 	case "stream":
-		// Range-Requests: http.ServeContent kann das (wenn Seekable Reader)
+		// /items/{id}/stream
 		ServeVideoFile(w, r, item.VideoPath)
 
 	case "nfo":
-		nfo, err := ParseNFOFile(item.NFOPath)
-		if err != nil {
-			http.Error(w, "no nfo or failed to parse", http.StatusNotFound)
+		// /items/{id}/nfo  OR  /items/{id}/nfo/raw
+		if len(parts) == 2 {
+			nfo, err := ParseNFOFile(item.NFOPath)
+			if err != nil {
+				http.Error(w, "no nfo", http.StatusNotFound)
+				return
+			}
+			writeJSON(w, nfo)
 			return
 		}
-		writeJSON(w, nfo)
 
-	case "nfo", "nfo/":
-		// unreachable (action parsing), but harmless
-		http.NotFound(w, r)
-
-	case "nforaw", "nfo_raw":
-		http.NotFound(w, r)
-
-	default:
-		// support /items/{id}/nfo/raw
-		if action == "nfo" && len(parts) > 2 && parts[2] == "raw" {
+		if len(parts) == 3 && parts[2] == "raw" {
 			if item.NFOPath == "" {
 				http.Error(w, "no nfo", http.StatusNotFound)
 				return
@@ -123,15 +119,10 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			ServeTextFile(w, r, item.NFOPath, "text/xml; charset=utf-8")
 			return
 		}
-		if action == "nfo" && len(parts) == 2 && parts[1] == "raw" {
-			// if someone uses /items/{id}/raw by mistake
-			http.NotFound(w, r)
-			return
-		}
-		if action == "nfo" && len(parts) > 1 && parts[1] == "raw" {
-			http.NotFound(w, r)
-			return
-		}
+
+		http.NotFound(w, r)
+
+	default:
 		http.NotFound(w, r)
 	}
 }
