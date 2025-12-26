@@ -42,7 +42,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s, err := server.New(*root, *addr)
+	s, err := server.New(*root, *addr, store)
 	if err != nil {
 		log.Fatal(err)
 	}
