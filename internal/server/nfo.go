@@ -6,8 +6,9 @@ import (
 	"strings"
 )
 
+// NFO represents a minimal, parsed view of common Kodi-style .nfo files.
 type NFO struct {
-	Type        string   `json:"type"` // movie / tvshow / episode / unknown
+	Type        string   `json:"type"` // movie | tvshow | episode | unknown
 	Title       string   `json:"title,omitempty"`
 	Original    string   `json:"originalTitle,omitempty"`
 	Plot        string   `json:"plot,omitempty"`
@@ -17,35 +18,40 @@ type NFO struct {
 	Season      string   `json:"season,omitempty"`
 	Episode     string   `json:"episode,omitempty"`
 	ShowTitle   string   `json:"showTitle,omitempty"`
-	RawRootName string   `json:"rawRoot,omitempty"`
+	RawRootName string   `json:"rawRoot"`
 }
 
+// ParseNFOFile parses a Kodi-style XML .nfo file.
+// If the file does not exist or cannot be parsed, an error is returned.
 func ParseNFOFile(path string) (*NFO, error) {
 	if path == "" {
 		return nil, os.ErrNotExist
 	}
-	b, err := os.ReadFile(path)
+
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 
-	// Find root element name cheaply
-	root := detectRootName(b)
+	root := detectRootName(data)
 
 	switch root {
+
 	case "movie":
 		var m struct {
-			XMLName        xml.Name `xml:"movie"`
-			Title          string   `xml:"title"`
-			OriginalTitle  string   `xml:"originaltitle"`
-			Plot           string   `xml:"plot"`
-			Year           string   `xml:"year"`
-			Rating         string   `xml:"rating"`
-			Genre          []string `xml:"genre"`
+			XMLName       xml.Name `xml:"movie"`
+			Title         string   `xml:"title"`
+			OriginalTitle string   `xml:"originaltitle"`
+			Plot          string   `xml:"plot"`
+			Year          string   `xml:"year"`
+			Rating        string   `xml:"rating"`
+			Genres        []string `xml:"genre"`
 		}
-		if err := xml.Unmarshal(b, &m); err != nil {
+
+		if err := xml.Unmarshal(data, &m); err != nil {
 			return nil, err
 		}
+
 		return &NFO{
 			Type:        "movie",
 			Title:       strings.TrimSpace(m.Title),
@@ -53,7 +59,7 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Plot:        strings.TrimSpace(m.Plot),
 			Year:        strings.TrimSpace(m.Year),
 			Rating:      strings.TrimSpace(m.Rating),
-			Genres:      trimAll(m.Genre),
+			Genres:      trimAll(m.Genres),
 			RawRootName: root,
 		}, nil
 
@@ -62,16 +68,18 @@ func ParseNFOFile(path string) (*NFO, error) {
 			XMLName xml.Name `xml:"tvshow"`
 			Title   string   `xml:"title"`
 			Plot    string   `xml:"plot"`
-			Genre   []string `xml:"genre"`
+			Genres  []string `xml:"genre"`
 		}
-		if err := xml.Unmarshal(b, &t); err != nil {
+
+		if err := xml.Unmarshal(data, &t); err != nil {
 			return nil, err
 		}
+
 		return &NFO{
 			Type:        "tvshow",
 			Title:       strings.TrimSpace(t.Title),
 			Plot:        strings.TrimSpace(t.Plot),
-			Genres:      trimAll(t.Genre),
+			Genres:      trimAll(t.Genres),
 			RawRootName: root,
 		}, nil
 
@@ -85,9 +93,11 @@ func ParseNFOFile(path string) (*NFO, error) {
 			ShowTitle string   `xml:"showtitle"`
 			Rating    string   `xml:"rating"`
 		}
-		if err := xml.Unmarshal(b, &e); err != nil {
+
+		if err := xml.Unmarshal(data, &e); err != nil {
 			return nil, err
 		}
+
 		return &NFO{
 			Type:        "episode",
 			Title:       strings.TrimSpace(e.Title),
@@ -100,32 +110,39 @@ func ParseNFOFile(path string) (*NFO, error) {
 		}, nil
 
 	default:
-		// unknown root, still return minimal info
-		return &NFO{Type: "unknown", RawRootName: root}, nil
+		// Unknown or unsupported root element
+		return &NFO{
+			Type:        "unknown",
+			RawRootName: root,
+		}, nil
 	}
 }
 
-func detectRootName(b []byte) string {
-	// naive but works for typical .nfo
-	s := string(b)
-	s = strings.TrimSpace(s)
-	// skip XML header if present
+// detectRootName extracts the root XML element name from a .nfo file.
+func detectRootName(data []byte) string {
+	s := strings.TrimSpace(string(data))
+
+	// strip XML header
 	if strings.HasPrefix(s, "<?xml") {
 		if i := strings.Index(s, "?>"); i >= 0 {
 			s = strings.TrimSpace(s[i+2:])
 		}
 	}
-	// root like <movie> or <movie xmlns="...">
+
+	// expect <root ...>
 	if strings.HasPrefix(s, "<") {
 		s = s[1:]
 	}
+
 	end := strings.IndexAny(s, " >\n\r\t")
-	if end <= 0 {
+	if end == -1 {
 		return ""
 	}
+
 	return strings.ToLower(strings.TrimSpace(s[:end]))
 }
 
+// trimAll trims whitespace and removes empty strings.
 func trimAll(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, v := range in {
