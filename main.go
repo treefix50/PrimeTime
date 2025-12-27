@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/treefix50/primetime/internal/ffmpeg"
 	"github.com/treefix50/primetime/internal/server"
@@ -19,8 +20,14 @@ func main() {
 		root = flag.String("root", "./media", "media root directory")
 		addr = flag.String("addr", ":8080", "listen address")
 		db   = flag.String("db", defaultDBPath(), "sqlite database path")
+		scan = flag.String("scan-interval", "10m", "media scan interval (e.g. 10m, 0 to disable)")
 	)
 	flag.Parse()
+
+	scanInterval, err := time.ParseDuration(*scan)
+	if err != nil {
+		log.Fatalf("invalid scan interval %q: %v", *scan, err)
+	}
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -42,7 +49,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s, err := server.New(*root, *addr, store)
+	s, err := server.New(*root, *addr, store, scanInterval)
 	if err != nil {
 		log.Fatal(err)
 	}
