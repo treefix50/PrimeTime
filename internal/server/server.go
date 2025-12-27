@@ -9,17 +9,16 @@ import (
 	"time"
 )
 
-const scanInterval = 10 * time.Minute
-
 type Server struct {
-	addr       string
-	lib        *Library
-	http       *http.Server
-	scanTicker *time.Ticker
-	scanStop   chan struct{}
+	addr         string
+	lib          *Library
+	http         *http.Server
+	scanInterval time.Duration
+	scanTicker   *time.Ticker
+	scanStop     chan struct{}
 }
 
-func New(root, addr string, store MediaStore) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration) (*Server, error) {
 	lib, err := NewLibrary(root, store)
 	if err != nil {
 		return nil, err
@@ -32,12 +31,13 @@ func New(root, addr string, store MediaStore) (*Server, error) {
 	mux := http.NewServeMux()
 
 	s := &Server{
-		addr: addr,
-		lib:  lib,
+		addr:         addr,
+		lib:          lib,
+		scanInterval: scanInterval,
 	}
 
-	if scanInterval > 0 {
-		s.scanTicker = time.NewTicker(scanInterval)
+	if s.scanInterval > 0 {
+		s.scanTicker = time.NewTicker(s.scanInterval)
 		s.scanStop = make(chan struct{})
 		go s.runScanTicker()
 	}
