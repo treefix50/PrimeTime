@@ -120,6 +120,19 @@ func (l *Library) Scan() error {
 				scanErrs = append(scanErrs, err)
 			}
 		}
+		for _, item := range found {
+			if item.NFOPath == "" {
+				continue
+			}
+			nfo, err := ParseNFOFile(item.NFOPath)
+			if err != nil {
+				scanErrs = append(scanErrs, err)
+				continue
+			}
+			if err := l.store.SaveNFO(item.ID, nfo); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
 	}
 
 	if len(scanErrs) > 0 {
