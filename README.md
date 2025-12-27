@@ -20,6 +20,7 @@ Kurze Befehle:
 ```bash
 curl http://localhost:8080/health
 curl http://localhost:8080/library
+curl -X POST http://localhost:8080/library  # triggert einen Rescan
 curl -I http://localhost:8080/items/{id}/stream
 ```
 
@@ -28,5 +29,5 @@ Zusätzliche Smoke-Tests (ohne Medien):
 ```bash
 curl.exe -s -o NUL -w "%{http_code}\n" http://localhost:8080/items/does-not-exist
 curl.exe -s -o NUL -w "%{http_code}\n" http://localhost:8080/items/does-not-exist/stream
-curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8080/library
+curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8080/library  # Rescan
 ```
