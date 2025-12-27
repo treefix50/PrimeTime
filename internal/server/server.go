@@ -13,12 +13,13 @@ type Server struct {
 	addr         string
 	lib          *Library
 	http         *http.Server
+	cors         bool
 	scanInterval time.Duration
 	scanTicker   *time.Ticker
 	scanStop     chan struct{}
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool) (*Server, error) {
 	lib, err := NewLibrary(root, store)
 	if err != nil {
 		return nil, err
@@ -33,6 +34,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration) (*Serv
 	s := &Server{
 		addr:         addr,
 		lib:          lib,
+		cors:         cors,
 		scanInterval: scanInterval,
 	}
 
@@ -48,7 +50,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration) (*Serv
 
 	s.http = &http.Server{
 		Addr:              addr,
-		Handler:           logMiddleware(mux),
+		Handler:           logMiddleware(mux, s.cors),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	return s, nil
@@ -93,6 +95,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
+	case http.MethodOptions:
+		if s.cors {
+			s.writePreflightHeaders(w, "GET, POST, OPTIONS")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
 	case http.MethodGet:
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
 		if s.lib.store == nil {
@@ -126,6 +136,16 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 
 // Routes under /items/{id}[/{action}...]
 func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		if s.cors {
+			s.writePreflightHeaders(w, "GET, OPTIONS")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -213,6 +233,12 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *Server) writePreflightHeaders(w http.ResponseWriter, methods string) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", methods)
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
 func filterItems(items []MediaItem, query string) []MediaItem {

@@ -21,6 +21,7 @@ func main() {
 		addr = flag.String("addr", ":8080", "listen address")
 		db   = flag.String("db", defaultDBPath(), "sqlite database path")
 		scan = flag.String("scan-interval", "10m", "media scan interval (e.g. 10m, 0 to disable)")
+		cors = flag.Bool("cors", false, "enable CORS headers for API responses")
 	)
 	flag.Parse()
 
@@ -49,7 +50,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	s, err := server.New(*root, *addr, store, scanInterval)
+	s, err := server.New(*root, *addr, store, scanInterval, *cors)
 	if err != nil {
 		log.Fatal(err)
 	}
