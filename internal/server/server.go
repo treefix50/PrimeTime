@@ -166,6 +166,18 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	case "nfo":
 		// /items/{id}/nfo  OR  /items/{id}/nfo/raw
 		if len(parts) == 2 {
+			if s.lib.store != nil {
+				nfo, ok, err := s.lib.store.GetNFO(item.ID)
+				if err != nil {
+					http.Error(w, "internal server error", http.StatusInternalServerError)
+					return
+				}
+				if ok && nfo != nil {
+					writeJSON(w, nfo)
+					return
+				}
+			}
+
 			nfo, err := ParseNFOFile(item.NFOPath)
 			if err != nil {
 				http.Error(w, "no nfo", http.StatusNotFound)

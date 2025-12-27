@@ -6,4 +6,5 @@ type MediaStore interface {
 	GetAll() ([]MediaItem, error)
 	GetByID(id string) (MediaItem, bool, error)
 	SaveNFO(mediaID string, nfo *NFO) error
+	GetNFO(mediaID string) (*NFO, bool, error)
 }

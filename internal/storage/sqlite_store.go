@@ -184,6 +184,78 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 	return err
 }
 
+func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("storage: missing database connection")
+	}
+
+	var (
+		nfo         server.NFO
+		nfoType     sql.NullString
+		title       sql.NullString
+		original    sql.NullString
+		plot        sql.NullString
+		year        sql.NullInt64
+		rating      sql.NullFloat64
+		genres      sql.NullString
+		season      sql.NullInt64
+		episode     sql.NullInt64
+		showTitle   sql.NullString
+		rawRootName sql.NullString
+	)
+
+	err := s.db.QueryRow(`
+		SELECT type, title, original_title, plot, year, rating, genres,
+			season, episode, show_title, raw_root
+		FROM nfo
+		WHERE media_id = ?
+	`, mediaID).Scan(
+		&nfoType,
+		&title,
+		&original,
+		&plot,
+		&year,
+		&rating,
+		&genres,
+		&season,
+		&episode,
+		&showTitle,
+		&rawRootName,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	nfo.Type = nfoType.String
+	nfo.Title = title.String
+	nfo.Original = original.String
+	nfo.Plot = plot.String
+	nfo.ShowTitle = showTitle.String
+	nfo.RawRootName = rawRootName.String
+
+	if year.Valid {
+		nfo.Year = strconv.FormatInt(year.Int64, 10)
+	}
+	if rating.Valid {
+		nfo.Rating = strconv.FormatFloat(rating.Float64, 'f', -1, 64)
+	}
+	if season.Valid {
+		nfo.Season = strconv.FormatInt(season.Int64, 10)
+	}
+	if episode.Valid {
+		nfo.Episode = strconv.FormatInt(episode.Int64, 10)
+	}
+	if genres.Valid {
+		parts := strings.Split(genres.String, ",")
+		nfo.Genres = trimGenres(parts)
+	}
+
+	return &nfo, true, nil
+}
+
 func nullString(value string) sql.NullString {
 	if strings.TrimSpace(value) == "" {
 		return sql.NullString{}
@@ -213,4 +285,15 @@ func parseFloat(value string) sql.NullFloat64 {
 		return sql.NullFloat64{}
 	}
 	return sql.NullFloat64{Float64: parsed, Valid: true}
+}
+
+func trimGenres(genres []string) []string {
+	out := make([]string, 0, len(genres))
+	for _, genre := range genres {
+		genre = strings.TrimSpace(genre)
+		if genre != "" {
+			out = append(out, genre)
+		}
+	}
+	return out
 }
