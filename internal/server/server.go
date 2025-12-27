@@ -96,8 +96,13 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 	if s.lib.store == nil {
-		writeJSON(w, s.lib.All())
+		items := s.lib.All()
+		if query != "" {
+			items = filterItems(items, query)
+		}
+		writeJSON(w, items)
 		return
 	}
 
@@ -105,6 +110,9 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
+	}
+	if query != "" {
+		items = filterItems(items, query)
 	}
 	writeJSON(w, items)
 }
@@ -186,4 +194,15 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func filterItems(items []MediaItem, query string) []MediaItem {
+	normalized := strings.ToLower(query)
+	filtered := make([]MediaItem, 0, len(items))
+	for _, item := range items {
+		if strings.Contains(strings.ToLower(item.Title), normalized) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
