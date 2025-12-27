@@ -92,29 +92,36 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	query := strings.TrimSpace(r.URL.Query().Get("q"))
-	if s.lib.store == nil {
-		items := s.lib.All()
+	switch r.Method {
+	case http.MethodGet:
+		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		if s.lib.store == nil {
+			items := s.lib.All()
+			if query != "" {
+				items = filterItems(items, query)
+			}
+			writeJSON(w, items)
+			return
+		}
+
+		items, err := s.lib.store.GetAll()
+		if err != nil {
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return
+		}
 		if query != "" {
 			items = filterItems(items, query)
 		}
 		writeJSON(w, items)
-		return
+	case http.MethodPost:
+		if err := s.lib.Scan(); err != nil {
+			http.Error(w, "scan failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]string{"status": "ok"})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
-
-	items, err := s.lib.store.GetAll()
-	if err != nil {
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	if query != "" {
-		items = filterItems(items, query)
-	}
-	writeJSON(w, items)
 }
 
 // Routes under /items/{id}[/{action}...]
