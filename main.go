@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -21,6 +23,7 @@ func main() {
 		root           = flag.String("root", "./media", "media root directory")
 		addr           = flag.String("addr", ":8080", "listen address")
 		db             = flag.String("db", defaultDBPath(), "sqlite database path")
+		dbReadOnly     = flag.Bool("db-read-only", false, "open sqlite database in read-only mode")
 		dbBusyTimeout  = flag.Duration("db-busy-timeout", 5*time.Second, "sqlite busy timeout (e.g. 5s, 0 to disable)")
 		dbSynchronous  = flag.String("db-synchronous", "NORMAL", "sqlite synchronous mode (OFF, NORMAL, FULL, EXTRA)")
 		dbCacheSize    = flag.Int("db-cache-size", -65536, "sqlite cache size (negative values are KiB)")
@@ -37,6 +40,7 @@ func main() {
 		BusyTimeout: *dbBusyTimeout,
 		Synchronous: *dbSynchronous,
 		CacheSize:   *dbCacheSize,
+		ReadOnly:    *dbReadOnly,
 	}
 
 	if err := runSQLiteMaintenance(*db, options, *integrityCheck, *vacuum, *vacuumInto, *analyze); err != nil {
@@ -59,8 +63,14 @@ func main() {
 	}
 	log.Printf("level=info msg=\"ffmpeg ready\" path=%s", ff)
 
-	if err := ensureDBDir(*db); err != nil {
-		log.Fatalf("level=error msg=\"failed to ensure db path\" path=%s err=%v", *db, err)
+	if *dbReadOnly {
+		if err := ensureDBReadable(*db); err != nil {
+			log.Fatalf("level=error msg=\"failed to verify db path\" path=%s err=%v", *db, err)
+		}
+	} else {
+		if err := ensureDBDir(*db); err != nil {
+			log.Fatalf("level=error msg=\"failed to ensure db path\" path=%s err=%v", *db, err)
+		}
 	}
 
 	store, err := storage.Open(*db, options)
@@ -117,15 +127,61 @@ func ensureDBDir(path string) error {
 	return file.Close()
 }
 
+func ensureDBReadable(path string) error {
+	if path == ":memory:" {
+		return fmt.Errorf("read-only mode requires a file-backed database")
+	}
+	dbPath := dbFilePath(path)
+	info, err := os.Stat(dbPath)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("db path points to a directory")
+	}
+	return nil
+}
+
+func dbFilePath(path string) string {
+	if !strings.HasPrefix(path, "file:") {
+		return path
+	}
+	parsed, err := url.Parse(path)
+	if err != nil {
+		return path
+	}
+	dbPath := parsed.Path
+	if dbPath == "" {
+		dbPath = parsed.Opaque
+	}
+	if dbPath == "" {
+		return path
+	}
+	unescaped, err := url.PathUnescape(dbPath)
+	if err != nil {
+		return dbPath
+	}
+	return unescaped
+}
+
 func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck, vacuum bool, vacuumInto string, analyze bool) error {
 	if !integrityCheck && !vacuum && vacuumInto == "" && !analyze {
 		return nil
 	}
+	if options.ReadOnly && (vacuum || vacuumInto != "" || analyze) {
+		return fmt.Errorf("read-only mode does not allow sqlite vacuum/analyze")
+	}
 	if vacuum && vacuumInto != "" {
 		return fmt.Errorf("choose either -sqlite-vacuum or -sqlite-vacuum-into, not both")
 	}
-	if err := ensureDBDir(dbPath); err != nil {
-		return err
+	if options.ReadOnly {
+		if err := ensureDBReadable(dbPath); err != nil {
+			return err
+		}
+	} else {
+		if err := ensureDBDir(dbPath); err != nil {
+			return err
+		}
 	}
 	if vacuumInto != "" {
 		if err := ensureBackupTarget(vacuumInto); err != nil {

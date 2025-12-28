@@ -60,6 +60,15 @@ Weitere Optionen:
 * `-db-busy-timeout` (SQLite Busy-Timeout; Default: `5s`; `0` deaktiviert)
 * `-db-synchronous` (SQLite Synchronous-Modus; Default: `NORMAL`)
 * `-db-cache-size` (SQLite Cache-Size; Default: `-65536` = ca. 64 MiB)
+* `-db-read-only` (öffnet die SQLite-DB schreibgeschützt; intern `file:...?...&mode=ro`)
+
+### Read-only-Modus
+
+Mit `-db-read-only` wird die Datenbank nur lesend geöffnet. Voraussetzungen und Verhalten:
+
+* Die DB-Datei muss bereits existieren (kein Auto-Create).
+* Initialer Scan und periodische Scans sind deaktiviert.
+* Schreibende Endpoints wie `POST /library` (Rescan) und `POST /items/{id}/playback` liefern `403`.
 
 ### SQLite-Konfiguration (PRAGMA)
 
