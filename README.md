@@ -52,6 +52,21 @@ Weitere Optionen:
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 
+### SQLite-Konfiguration (PRAGMA)
+
+Beim Öffnen der Datenbank setzt PrimeTime folgende pragmatische Defaults:
+
+* `PRAGMA journal_mode = WAL;` (bessere Parallelität bei Lesezugriffen)
+* `PRAGMA synchronous = NORMAL;` (schneller bei WAL, akzeptabler Schutz für Medienkatalog)
+* `PRAGMA busy_timeout = 5000;` (vermeidet sofortige Lock-Fehler bei parallelen Zugriffen)
+  * Override möglich über `PRIMETIME_SQLITE_BUSY_TIMEOUT_MS` (Millisekunden).
+* `PRAGMA temp_store = MEMORY;` (temporäre Tabellen/Indizes im RAM für weniger I/O)
+* `PRAGMA cache_size = -65536;` (≈ 64 MiB Cache; negative Werte = KiB)
+* `PRAGMA journal_size_limit = 67108864;` (≈ 64 MiB; begrenzt WAL-/Journal-Wachstum)
+
+Die Werte sind auf einen ausgewogenen Mix aus Performance und Sicherheit ausgelegt und können bei Bedarf
+an die lokale Hardware oder sehr große Bibliotheken angepasst werden.
+
 Statt `go run .` sollte unter Windows das Skript `./run.ps1` genutzt werden.
 `run.ps1` prüft zuerst, ob `tools/ffmpeg/ffmpeg.exe` und `tools/ffmpeg/ffprobe.exe` vorhanden und ausführbar sind
 (inklusive der benötigten `.dll`‑Dateien im selben Ordner).
