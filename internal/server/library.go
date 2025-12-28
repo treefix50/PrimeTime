@@ -114,6 +114,12 @@ func (l *Library) Scan() error {
 	l.mu.Unlock()
 
 	if l.store != nil {
+		idsToDelete := removedIDs(previous, found)
+		if len(idsToDelete) > 0 {
+			if err := l.store.DeleteItems(idsToDelete); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
 		itemsToSave := diffItems(found, previous, lastScan)
 		if len(itemsToSave) > 0 {
 			if err := l.store.SaveItems(itemsToSave); err != nil {
@@ -215,6 +221,19 @@ func diffItems(found, previous map[string]MediaItem, lastScan time.Time) []Media
 		prev, ok := previous[id]
 		if !ok || !mediaItemEqual(item, prev) {
 			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func removedIDs(previous, found map[string]MediaItem) []string {
+	if len(previous) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(previous))
+	for id := range previous {
+		if _, ok := found[id]; !ok {
+			out = append(out, id)
 		}
 	}
 	return out

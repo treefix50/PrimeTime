@@ -61,6 +61,30 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 	return nil
 }
 
+func (s *Store) DeleteItems(ids []string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		"DELETE FROM media_items WHERE id IN (%s)",
+		strings.Join(placeholders, ","),
+	)
+
+	_, err := s.db.Exec(query, args...)
+	return err
+}
+
 func (s *Store) GetAll() ([]server.MediaItem, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("storage: missing database connection")
