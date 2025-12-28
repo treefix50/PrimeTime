@@ -85,9 +85,6 @@ func validateBinary(ctx context.Context, path string, args ...string) error {
 	cmd.Stderr = nil
 	return cmd.Run()
 }
-	}
-	return "", errors.New("ffmpeg not found in tools/ffmpeg; place ffmpeg and ffprobe there")
-}
 
 func exe(name string) string {
 	if runtime.GOOS == "windows" {
