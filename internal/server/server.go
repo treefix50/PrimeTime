@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type Server struct {
 	scanInterval time.Duration
 	scanTicker   *time.Ticker
 	scanStop     chan struct{}
+	scanStopOnce sync.Once
+	scanWg       sync.WaitGroup
 }
 
 func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool) (*Server, error) {
@@ -26,6 +29,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 	}
 	// initial scan
 	if err := lib.Scan(); err != nil {
+		log.Printf("scan failed (initial): %v", err)
 		return nil, err
 	}
 
@@ -41,6 +45,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 	if s.scanInterval > 0 {
 		s.scanTicker = time.NewTicker(s.scanInterval)
 		s.scanStop = make(chan struct{})
+		s.scanWg.Add(1)
 		go s.runScanTicker()
 	}
 
@@ -66,11 +71,12 @@ func (s *Server) Close() error {
 }
 
 func (s *Server) runScanTicker() {
+	defer s.scanWg.Done()
 	for {
 		select {
 		case <-s.scanTicker.C:
 			if err := s.lib.Scan(); err != nil {
-				log.Printf("periodic scan failed: %v", err)
+				log.Printf("scan failed (periodic): %v", err)
 			}
 		case <-s.scanStop:
 			s.scanTicker.Stop()
@@ -83,7 +89,10 @@ func (s *Server) stopScanTicker() {
 	if s.scanStop == nil {
 		return
 	}
-	close(s.scanStop)
+	s.scanStopOnce.Do(func() {
+		close(s.scanStop)
+	})
+	s.scanWg.Wait()
 	s.scanStop = nil
 }
 
