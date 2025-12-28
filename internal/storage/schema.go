@@ -38,6 +38,11 @@ const schemaNFOIndexes = `
 CREATE INDEX IF NOT EXISTS idx_nfo_show_title ON nfo(show_title);
 CREATE INDEX IF NOT EXISTS idx_nfo_type ON nfo(type);`
 
+const schemaNFOQueryIndexes = `
+CREATE INDEX IF NOT EXISTS idx_nfo_year ON nfo(year);
+CREATE INDEX IF NOT EXISTS idx_nfo_genres ON nfo(genres);
+CREATE INDEX IF NOT EXISTS idx_nfo_title ON nfo(title);`
+
 const schemaPlaybackState = `
 CREATE TABLE IF NOT EXISTS playback_state (
 	media_id TEXT NOT NULL,
@@ -56,6 +61,9 @@ CREATE TABLE IF NOT EXISTS library_roots (
 	type TEXT NOT NULL,
 	created_at INTEGER NOT NULL
 );`
+
+const schemaLibraryRootsIndexes = `
+CREATE INDEX IF NOT EXISTS idx_library_roots_path ON library_roots(path);`
 
 const schemaScanRuns = `
 CREATE TABLE IF NOT EXISTS scan_runs (
@@ -89,6 +97,13 @@ var migrations = []migration{
 			schemaPlaybackState,
 			schemaLibraryRoots,
 			schemaScanRuns,
+		},
+	},
+	{
+		version: 2,
+		statements: []string{
+			schemaNFOQueryIndexes,
+			schemaLibraryRootsIndexes,
 		},
 	},
 }
