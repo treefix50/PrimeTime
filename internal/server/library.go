@@ -23,10 +23,11 @@ type MediaItem struct {
 }
 
 type Library struct {
-	root  string
-	mu    sync.RWMutex
-	items map[string]MediaItem
-	store MediaStore
+	root   string
+	rootID string
+	mu     sync.RWMutex
+	items  map[string]MediaItem
+	store  MediaStore
 	// lastScan tracks the time the library last completed a scan.
 	lastScan time.Time
 }
@@ -36,6 +37,14 @@ func NewLibrary(root string, store MediaStore) (*Library, error) {
 		return nil, err
 	}
 	items := map[string]MediaItem{}
+	var rootID string
+	if store != nil {
+		rootEntry, err := store.AddRoot(root, "library")
+		if err != nil {
+			return nil, err
+		}
+		rootID = rootEntry.ID
+	}
 	if store != nil {
 		storedItems, err := store.GetAll()
 		if err != nil {
@@ -46,15 +55,25 @@ func NewLibrary(root string, store MediaStore) (*Library, error) {
 		}
 	}
 	return &Library{
-		root:  root,
-		items: items,
-		store: store,
+		root:   root,
+		rootID: rootID,
+		items:  items,
+		store:  store,
 	}, nil
 }
 
 func (l *Library) Scan() error {
 	found := map[string]MediaItem{}
 	var scanErrs []error
+	var scanRunID string
+	if l.store != nil && l.rootID != "" {
+		run, err := l.store.StartScanRun(l.rootID, time.Now())
+		if err != nil {
+			scanErrs = append(scanErrs, err)
+		} else {
+			scanRunID = run.ID
+		}
+	}
 	allowedExtensions := map[string]bool{
 		".avi":  true,
 		".m2ts": true,
@@ -103,7 +122,7 @@ func (l *Library) Scan() error {
 		return nil
 	})
 	if err != nil {
-		return err
+		scanErrs = append(scanErrs, err)
 	}
 
 	l.mu.Lock()
@@ -144,8 +163,26 @@ func (l *Library) Scan() error {
 		}
 	}
 
+	var scanErr error
 	if len(scanErrs) > 0 {
-		return errors.Join(scanErrs...)
+		scanErr = errors.Join(scanErrs...)
+	}
+	if scanRunID != "" {
+		finishedAt := time.Now()
+		if scanErr != nil {
+			if err := l.store.FailScanRun(scanRunID, finishedAt, scanErr.Error()); err != nil {
+				scanErrs = append(scanErrs, err)
+				scanErr = errors.Join(scanErrs...)
+			}
+		} else {
+			if err := l.store.FinishScanRun(scanRunID, finishedAt); err != nil {
+				scanErrs = append(scanErrs, err)
+				scanErr = errors.Join(scanErrs...)
+			}
+		}
+	}
+	if scanErr != nil {
+		return scanErr
 	}
 	return nil
 }
