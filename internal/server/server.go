@@ -94,15 +94,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodOptions:
-		if s.cors {
-			s.writePreflightHeaders(w, "GET, POST, OPTIONS")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if s.handleOptions(w, r, "GET, POST, OPTIONS") {
 		return
+	}
+
+	switch r.Method {
 	case http.MethodGet:
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
 		if s.lib.store == nil {
@@ -136,13 +132,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 
 // Routes under /items/{id}[/{action}...]
 func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		if s.cors {
-			s.writePreflightHeaders(w, "GET, OPTIONS")
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if s.handleOptions(w, r, "GET, OPTIONS") {
 		return
 	}
 
@@ -252,6 +242,19 @@ func (s *Server) writePreflightHeaders(w http.ResponseWriter, methods string) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Methods", methods)
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+}
+
+func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request, methods string) bool {
+	if r.Method != http.MethodOptions {
+		return false
+	}
+	if s.cors {
+		s.writePreflightHeaders(w, methods)
+		w.WriteHeader(http.StatusOK)
+		return true
+	}
+	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	return true
 }
 
 func filterItems(items []MediaItem, query string) []MediaItem {
