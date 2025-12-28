@@ -83,6 +83,5 @@ curl http://localhost:8080/health
 
 ## Troubleshooting (kurz)
 
-* ffmpeg fehlt: sicherstellen, dass es im `PATH` liegt oder Auto-Download nicht deaktiviert ist.
-* Windows-Auto-Download: `tools/ffmpeg/ffmpeg.exe` und `ffprobe.exe` müssen mehrere MB groß sein; nur wenige KB deuten auf einen defekten Download hin.
+* ffmpeg fehlt: sicherstellen, dass `tools/ffmpeg/ffmpeg(.exe)` und `tools/ffmpeg/ffprobe(.exe)` vorhanden sind.
 * Build-Probleme: `go mod tidy` ausführen, falls `go.sum`/Module fehlen.

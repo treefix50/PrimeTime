@@ -1,26 +1,11 @@
 package ffmpeg
 
 import (
-	"archive/zip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
-	"time"
-)
-
-const (
-	// Windows build (BtbN FFmpeg-Builds "latest" asset)
-	winZipURL       = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
-	winChecksumsURL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/checksums.sha256"
 )
 
 func Ensure(ctx context.Context, baseDir string) (string, error) {
@@ -97,7 +82,7 @@ func Ensure(ctx context.Context, baseDir string) (string, error) {
 	if fileExists(local) {
 		return local, nil
 	}
-	return "", errors.New("ffmpeg download finished, but ffmpeg.exe not found")
+	return "", errors.New("ffmpeg not found in tools/ffmpeg; place ffmpeg and ffprobe there")
 }
 
 func exe(name string) string {
