@@ -81,7 +81,15 @@ func (s *Store) DeleteItems(ids []string) error {
 		strings.Join(placeholders, ","),
 	)
 
-	_, err := s.db.Exec(query, args...)
+	if _, err := s.db.Exec(query, args...); err != nil {
+		return err
+	}
+
+	playbackQuery := fmt.Sprintf(
+		"DELETE FROM playback_state WHERE media_id IN (%s)",
+		strings.Join(placeholders, ","),
+	)
+	_, err := s.db.Exec(playbackQuery, args...)
 	return err
 }
 
@@ -290,6 +298,84 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 	}
 
 	return &nfo, true, nil
+}
+
+func (s *Store) UpsertPlaybackState(mediaID string, positionSeconds, durationSeconds int64, clientID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+
+	normalizedClientID := strings.TrimSpace(clientID)
+	_, err := s.db.Exec(`
+		INSERT INTO playback_state (
+			media_id, position_seconds, duration_seconds, updated_at, client_id
+		)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(media_id, client_id) DO UPDATE SET
+			position_seconds=excluded.position_seconds,
+			duration_seconds=excluded.duration_seconds,
+			updated_at=excluded.updated_at
+	`,
+		mediaID,
+		positionSeconds,
+		durationSeconds,
+		time.Now().Unix(),
+		normalizedClientID,
+	)
+	return err
+}
+
+func (s *Store) GetPlaybackState(mediaID, clientID string) (*server.PlaybackState, bool, error) {
+	if s == nil || s.db == nil {
+		return nil, false, fmt.Errorf("storage: missing database connection")
+	}
+
+	normalizedClientID := strings.TrimSpace(clientID)
+	query := `
+		SELECT media_id, position_seconds, duration_seconds, updated_at, client_id
+		FROM playback_state
+		WHERE media_id = ?
+	`
+	args := []any{mediaID}
+	if normalizedClientID != "" {
+		query += " AND client_id = ?"
+		args = append(args, normalizedClientID)
+	} else {
+		query += " ORDER BY updated_at DESC LIMIT 1"
+	}
+
+	var state server.PlaybackState
+	err := s.db.QueryRow(query, args...).Scan(
+		&state.MediaID,
+		&state.PositionSeconds,
+		&state.DurationSeconds,
+		&state.UpdatedAt,
+		&state.ClientID,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &state, true, nil
+}
+
+func (s *Store) DeletePlaybackState(mediaID, clientID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+
+	normalizedClientID := strings.TrimSpace(clientID)
+	query := "DELETE FROM playback_state WHERE media_id = ?"
+	args := []any{mediaID}
+	if normalizedClientID != "" {
+		query += " AND client_id = ?"
+		args = append(args, normalizedClientID)
+	}
+	_, err := s.db.Exec(query, args...)
+	return err
 }
 
 func nullString(value string) sql.NullString {

@@ -151,11 +151,11 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 
 // Routes under /items/{id}[/{action}...]
 func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
-	if s.handleOptions(w, r, "GET, OPTIONS") {
+	if s.handleOptions(w, r, "GET, POST, OPTIONS") {
 		return
 	}
 
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
 		methodNotAllowed(w)
 		return
 	}
@@ -193,14 +193,26 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "":
 		// /items/{id}
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
 		writeJSON(w, r, item)
 
 	case "stream":
 		// /items/{id}/stream
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
 		ServeVideoFile(w, r, item.VideoPath)
 
 	case "nfo":
 		// /items/{id}/nfo  OR  /items/{id}/nfo/raw
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
 		if len(parts) == 2 {
 			if s.lib.store != nil {
 				nfo, ok, err := s.lib.store.GetNFO(item.ID)
@@ -233,6 +245,64 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		}
 
 		http.Error(w, errNotFound, http.StatusNotFound)
+
+	case "playback":
+		if s.lib.store == nil {
+			http.Error(w, errNotFound, http.StatusNotFound)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			clientID := strings.TrimSpace(r.URL.Query().Get("clientId"))
+			state, ok, err := s.lib.store.GetPlaybackState(item.ID, clientID)
+			if err != nil {
+				http.Error(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			if !ok || state == nil {
+				http.Error(w, errNotFound, http.StatusNotFound)
+				return
+			}
+			writeJSON(w, r, state)
+		case http.MethodPost:
+			var payload PlaybackEvent
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+
+			event := strings.ToLower(strings.TrimSpace(payload.Event))
+			if event == "" {
+				event = "progress"
+			}
+			if event != "progress" && event != "stop" {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+
+			clientID := strings.TrimSpace(payload.ClientID)
+			position := payload.PositionSeconds
+			duration := payload.DurationSeconds
+
+			shouldDelete := position <= 0 || duration <= 0 || (event == "stop" && position >= duration)
+			if shouldDelete {
+				if err := s.lib.store.DeletePlaybackState(item.ID, clientID); err != nil {
+					http.Error(w, errInternal, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, r, map[string]string{"status": "ok"})
+				return
+			}
+
+			if err := s.lib.store.UpsertPlaybackState(item.ID, position, duration, clientID); err != nil {
+				http.Error(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+		default:
+			methodNotAllowed(w)
+		}
 
 	default:
 		http.Error(w, errNotFound, http.StatusNotFound)
