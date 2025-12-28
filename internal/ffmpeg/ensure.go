@@ -29,23 +29,28 @@ func Ensure(ctx context.Context, baseDir string) (string, error) {
 		if p, err := exec.LookPath("ffmpeg"); err == nil {
 			return p, nil
 		}
+		local := filepath.Join(baseDir, "tools", "ffmpeg", exe("ffmpeg"))
+		if fileExists(local) {
+			return local, nil
+		}
 		return "", errors.New("ffmpeg not found and auto-download disabled (PRIMETIME_NO_FFMPEG_DOWNLOAD=1)")
 	}
 
-	// 1) PATH
-	if p, err := exec.LookPath("ffmpeg"); err == nil {
-		return p, nil
+	// Auto-download (Windows only in this minimal version)
+	if runtime.GOOS != "windows" {
+		if p, err := exec.LookPath("ffmpeg"); err == nil {
+			return p, nil
+		}
+		local := filepath.Join(baseDir, "tools", "ffmpeg", exe("ffmpeg"))
+		if fileExists(local) {
+			return local, nil
+		}
+		return "", errors.New("ffmpeg not found in PATH; auto-download is currently implemented for Windows only")
 	}
 
-	// 2) local tools path
 	local := filepath.Join(baseDir, "tools", "ffmpeg", exe("ffmpeg"))
 	if fileExists(local) {
 		return local, nil
-	}
-
-	// 3) auto-download (Windows only in this minimal version)
-	if runtime.GOOS != "windows" {
-		return "", errors.New("ffmpeg not found in PATH; auto-download is currently implemented for Windows only")
 	}
 
 	destDir := filepath.Join(baseDir, "tools", "ffmpeg")
