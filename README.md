@@ -7,14 +7,9 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 ## Voraussetzungen
 
 * **Go 1.22** muss installiert sein (entspricht `go.mod`).
-* **ffmpeg** muss lokal vorhanden sein und manuell unter `./tools/ffmpeg` abgelegt werden.
-  * **Windows (empfohlen: FFmpeg-Builds ZIP)**:
-    1. ZIP herunterladen und entpacken (Ordner enthält u. a. `bin/`, `lib/`, `include/`).
-    2. **Alle Dateien aus `bin/`** nach `tools/ffmpeg/` kopieren (inkl. `ffmpeg.exe`, `ffprobe.exe` und `.dll`‑Dateien).
-  * **Linux/macOS**:
-    1. Archiv/Installationspaket entpacken.
-    2. **Binaries aus `bin/`** nach `tools/ffmpeg/` kopieren (`ffmpeg` und `ffprobe`).
-  * Es gibt **keinen** Auto-Download mehr; ohne diese Dateien startet PrimeTime nicht.
+* **ffmpeg** muss verfügbar sein. Unter Windows wird standardmäßig beim Programmstart ein lokales ffmpeg in `tools/ffmpeg` bereitgestellt (Auto-Download).
+  * Der Auto-Download passiert **beim Programmstart** in `internal/ffmpeg/ensure.go`.
+  * Er greift **nur unter Windows**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird er deaktiviert; dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
 * `./media` existiert oder wird beim Start erzeugt. Optional wird eine SQLite-DB unter `./data/primetime.db` angelegt.
 
 ## Start
@@ -32,8 +27,10 @@ Weitere Optionen:
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 
 Statt `go run .` sollte das Skript `./run.ps1` genutzt werden.
-`run.ps1` prüft zuerst, ob `tools/ffmpeg/ffmpeg(.exe)` und `tools/ffmpeg/ffprobe(.exe)` vorhanden und ausführbar sind.
-Anschließend wird `go run .` gestartet. ffmpeg wird **nicht** automatisch heruntergeladen.
+`run.ps1` führt **keinen** ffmpeg-Download aus; es ruft nur (falls nötig) `go mod tidy` und danach `go run .` auf.
+Der **ffmpeg-Auto-Download passiert beim Programmstart** (siehe `internal/ffmpeg/ensure.go`) und
+greift **nur unter Windows**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird der Auto-Download deaktiviert;
+dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
 
 ## Beispiele/Kommandos
 
