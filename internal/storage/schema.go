@@ -12,6 +12,11 @@ CREATE TABLE IF NOT EXISTS media_items (
 	nfo_path TEXT
 );`
 
+const schemaMediaItemsIndexes = `
+CREATE INDEX IF NOT EXISTS idx_media_items_title ON media_items(title);
+CREATE INDEX IF NOT EXISTS idx_media_items_path ON media_items(path);
+CREATE INDEX IF NOT EXISTS idx_media_items_modified ON media_items(modified);`
+
 const schemaNFO = `
 CREATE TABLE IF NOT EXISTS nfo (
 	media_id TEXT NOT NULL PRIMARY KEY,
@@ -28,6 +33,10 @@ CREATE TABLE IF NOT EXISTS nfo (
 	raw_root TEXT,
 	FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
 );`
+
+const schemaNFOIndexes = `
+CREATE INDEX IF NOT EXISTS idx_nfo_show_title ON nfo(show_title);
+CREATE INDEX IF NOT EXISTS idx_nfo_type ON nfo(type);`
 
 const schemaPlaybackState = `
 CREATE TABLE IF NOT EXISTS playback_state (
@@ -66,7 +75,9 @@ func (s *Store) EnsureSchema() error {
 
 	statements := []string{
 		schemaMediaItems,
+		schemaMediaItemsIndexes,
 		schemaNFO,
+		schemaNFOIndexes,
 		schemaPlaybackState,
 		schemaLibraryRoots,
 		schemaScanRuns,
