@@ -158,18 +158,26 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
 	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
+	if len(items) == 0 {
+		return nil
 	}
-	defer func() {
+
+	const batchSize = 750
+	for start := 0; start < len(items); start += batchSize {
+		end := start + batchSize
+		if end > len(items) {
+			end = len(items)
+		}
+
+		tx, err := s.db.Begin()
 		if err != nil {
+			return err
+		}
+		rollback := func() {
 			_ = tx.Rollback()
 		}
-	}()
 
-	stmt, err := tx.Prepare(`
+		stmt, err := tx.Prepare(`
 		INSERT INTO media_items (id, path, title, size, modified, nfo_path)
 		VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
@@ -179,27 +187,36 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 			modified=excluded.modified,
 			nfo_path=excluded.nfo_path
 	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
-	for _, item := range items {
-		_, err = stmt.Exec(
-			item.ID,
-			item.VideoPath,
-			item.Title,
-			item.Size,
-			item.Modified.Unix(),
-			nullString(item.NFOPath),
-		)
 		if err != nil {
+			rollback()
 			return err
 		}
-	}
 
-	if err = tx.Commit(); err != nil {
-		return err
+		for _, item := range items[start:end] {
+			_, err = stmt.Exec(
+				item.ID,
+				item.VideoPath,
+				item.Title,
+				item.Size,
+				item.Modified.Unix(),
+				nullString(item.NFOPath),
+			)
+			if err != nil {
+				stmt.Close()
+				rollback()
+				return err
+			}
+		}
+
+		if err := stmt.Close(); err != nil {
+			rollback()
+			return err
+		}
+
+		if err = tx.Commit(); err != nil {
+			rollback()
+			return err
+		}
 	}
 
 	return nil
@@ -225,7 +242,16 @@ func (s *Store) DeleteItems(ids []string) error {
 		strings.Join(placeholders, ","),
 	)
 
-	if _, err := s.db.Exec(query, args...); err != nil {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	rollback := func() {
+		_ = tx.Rollback()
+	}
+
+	if _, err := tx.Exec(query, args...); err != nil {
+		rollback()
 		return err
 	}
 
@@ -233,8 +259,16 @@ func (s *Store) DeleteItems(ids []string) error {
 		"DELETE FROM playback_state WHERE media_id IN (%s)",
 		strings.Join(placeholders, ","),
 	)
-	_, err := s.db.Exec(playbackQuery, args...)
-	return err
+	if _, err := tx.Exec(playbackQuery, args...); err != nil {
+		rollback()
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		rollback()
+		return err
+	}
+	return nil
 }
 
 func (s *Store) GetAll() ([]server.MediaItem, error) {
