@@ -14,6 +14,8 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 
 ## Start
 
+### Windows (PowerShell)
+
 ```bash
 ./run.ps1 -root ./media -addr :8080 -db ./data/primetime.db
 ```
@@ -26,11 +28,20 @@ Weitere Optionen:
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 
-Statt `go run .` sollte das Skript `./run.ps1` genutzt werden.
+Statt `go run .` sollte unter **Windows** das Skript `./run.ps1` genutzt werden.
 `run.ps1` führt **keinen** ffmpeg-Download aus; es ruft nur (falls nötig) `go mod tidy` und danach `go run .` auf.
-Der **ffmpeg-Auto-Download passiert beim Programmstart** (siehe `internal/ffmpeg/ensure.go`) und
-greift **nur unter Windows**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird der Auto-Download deaktiviert;
-dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
+Beim Programmstart **prüft zuerst** `internal/ffmpeg/ensure.go`, ob ffmpeg bereitgestellt werden muss.
+Diese Prüfung und der Auto-Download sind **Windows-spezifisch**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird der
+Auto-Download deaktiviert; dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
+
+### Linux/macOS
+
+```bash
+go run . -root ./media -addr :8080 -db ./data/primetime.db
+```
+
+Auch hier startet der HTTP-Server mit initialem Scan. Die ffmpeg-Prüfung erfolgt beim Programmstart
+in `internal/ffmpeg/ensure.go`; der Windows-spezifische Auto-Download greift auf diesen Plattformen nicht.
 
 ## Beispiele/Kommandos
 
