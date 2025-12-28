@@ -14,7 +14,7 @@ Standardmäßig nutzt PrimeTime eine SQLite-Datenbank unter `./data/primetime.db
 Der Pfad lässt sich mit `-db` anpassen (z. B. `-db :memory:`).
 Weitere Optionen:
 
-* `-scan-interval` (Intervall für automatische Scans; `0` deaktiviert die Scans)
+* `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 
 Statt `go run .` sollte das Skript `./run.ps1` genutzt werden.
