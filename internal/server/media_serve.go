@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,5 +55,5 @@ func ServeTextFile(w http.ResponseWriter, r *http.Request, path, contentType str
 	}
 	w.Header().Set("Content-Type", normalizeTextContentType(contentType))
 	w.Header().Set("Cache-Control", "no-cache")
-	http.ServeContent(w, r, filepath.Base(path), time.Now(), strings.NewReader(string(b)))
+	http.ServeContent(w, r, filepath.Base(path), time.Now(), bytes.NewReader(b))
 }
