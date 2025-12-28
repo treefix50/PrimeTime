@@ -29,6 +29,17 @@ CREATE TABLE IF NOT EXISTS nfo (
 	FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
 );`
 
+const schemaPlaybackState = `
+CREATE TABLE IF NOT EXISTS playback_state (
+	media_id TEXT NOT NULL,
+	position_seconds INTEGER NOT NULL,
+	duration_seconds INTEGER NOT NULL,
+	updated_at INTEGER NOT NULL,
+	client_id TEXT NOT NULL DEFAULT '',
+	PRIMARY KEY (media_id, client_id),
+	FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
+);`
+
 func (s *Store) EnsureSchema() error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
@@ -37,6 +48,7 @@ func (s *Store) EnsureSchema() error {
 	statements := []string{
 		schemaMediaItems,
 		schemaNFO,
+		schemaPlaybackState,
 	}
 
 	for _, statement := range statements {
