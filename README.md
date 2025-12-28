@@ -72,7 +72,7 @@ curl "http://localhost:8080/library?q=matrix"  # Filterung über Query möglich
 curl "http://localhost:8080/library?q=alien"
 # Erwartet: JSON-Array, gefiltert nach Titel-Substring "alien"
 
-curl -X POST http://localhost:8080/library  # triggert einen Rescan
+curl.exe -X POST http://localhost:8080/library  # triggert einen Rescan (PowerShell: echtes curl)
 # Erwartet: Rescan wird angestoßen, Antwort: { "status": "ok" }
 
 curl -I http://localhost:8080/items/{id}/stream
@@ -85,6 +85,22 @@ curl http://localhost:8080/items/{id}/nfo/raw
 # Erwartet: XML-Text der NFO, 404 falls keine NFO existiert
 ```
 Der Query-Parameter `q` filtert nach Treffern im Titel.
+
+## Checks (ffmpeg & SQLite)
+
+```bash
+tools/ffmpeg/ffmpeg -version
+# Erwartet: Versionsausgabe von ffmpeg
+
+tools/ffmpeg/ffprobe -version
+# Erwartet: Versionsausgabe von ffprobe
+
+sqlite3 ./data/primetime.db ".tables"
+# Erwartet: Liste der Tabellen (z. B. items, scans, meta)
+
+sqlite3 ./data/primetime.db "SELECT COUNT(*) FROM items;"
+# Erwartet: Anzahl der gefundenen Media-Items
+```
 
 ## Smoke-Tests (ohne Medien)
 
