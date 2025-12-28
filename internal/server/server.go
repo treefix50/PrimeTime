@@ -88,7 +88,7 @@ func (s *Server) stopScanTicker() {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", textContentType)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
 }
@@ -231,7 +231,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 }
 
 func writeJSON(w http.ResponseWriter, r *http.Request, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Content-Type", jsonContentType)
 	var buf strings.Builder
 	encoder := json.NewEncoder(&buf)
 	if err := encoder.Encode(v); err != nil {

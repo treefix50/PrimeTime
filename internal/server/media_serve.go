@@ -52,7 +52,7 @@ func ServeTextFile(w http.ResponseWriter, r *http.Request, path, contentType str
 		http.Error(w, "file not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Type", normalizeTextContentType(contentType))
 	w.Header().Set("Cache-Control", "no-cache")
 	http.ServeContent(w, r, filepath.Base(path), time.Now(), strings.NewReader(string(b)))
 }
