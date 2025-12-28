@@ -32,8 +32,8 @@ func newTestStore(t *testing.T, ensureSchema bool) *Store {
 func TestEnsureSchema(t *testing.T) {
 	store := newTestStore(t, false)
 
-	if err := store.EnsureSchema(); err != nil {
-		t.Fatalf("EnsureSchema() error = %v", err)
+	if err := store.MigrateSchema(); err != nil {
+		t.Fatalf("MigrateSchema() error = %v", err)
 	}
 
 	rows, err := store.db.Query(`
@@ -58,10 +58,18 @@ func TestEnsureSchema(t *testing.T) {
 		t.Fatalf("sqlite_master rows: %v", err)
 	}
 
-	for _, table := range []string{"media_items", "nfo", "playback_state", "library_roots", "scan_runs"} {
+	for _, table := range []string{"schema_migrations", "media_items", "nfo", "playback_state", "library_roots", "scan_runs"} {
 		if !found[table] {
 			t.Fatalf("expected table %q to exist", table)
 		}
+	}
+
+	var version int
+	if err := store.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
+		t.Fatalf("query schema_migrations: %v", err)
+	}
+	if version != 1 {
+		t.Fatalf("unexpected schema version: got %d want 1", version)
 	}
 }
 

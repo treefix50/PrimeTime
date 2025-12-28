@@ -68,26 +68,101 @@ CREATE TABLE IF NOT EXISTS scan_runs (
 	FOREIGN KEY (root_id) REFERENCES library_roots(id) ON DELETE CASCADE
 );`
 
+const schemaMigrations = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+	version INTEGER PRIMARY KEY
+);`
+
+type migration struct {
+	version    int
+	statements []string
+}
+
+var migrations = []migration{
+	{
+		version: 1,
+		statements: []string{
+			schemaMediaItems,
+			schemaMediaItemsIndexes,
+			schemaNFO,
+			schemaNFOIndexes,
+			schemaPlaybackState,
+			schemaLibraryRoots,
+			schemaScanRuns,
+		},
+	},
+}
+
 func (s *Store) EnsureSchema() error {
+	return s.MigrateSchema()
+}
+
+func (s *Store) MigrateSchema() error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
 	}
 
-	statements := []string{
-		schemaMediaItems,
-		schemaMediaItemsIndexes,
-		schemaNFO,
-		schemaNFOIndexes,
-		schemaPlaybackState,
-		schemaLibraryRoots,
-		schemaScanRuns,
+	if _, err := s.db.Exec(schemaMigrations); err != nil {
+		return fmt.Errorf("storage: create schema_migrations table: %w", err)
 	}
 
-	for _, statement := range statements {
-		if _, err := s.db.Exec(statement); err != nil {
+	current, err := s.currentSchemaVersion()
+	if err != nil {
+		return err
+	}
+
+	for _, migration := range migrations {
+		if migration.version <= current {
+			continue
+		}
+		if err := s.applyMigration(migration); err != nil {
 			return err
+		}
+		current = migration.version
+	}
+
+	return nil
+}
+
+func (s *Store) currentSchemaVersion() (int, error) {
+	if s == nil || s.db == nil {
+		return 0, fmt.Errorf("storage: missing database connection")
+	}
+
+	var version int
+	if err := s.db.QueryRow(`SELECT COALESCE(MAX(version), 0) FROM schema_migrations`).Scan(&version); err != nil {
+		return 0, fmt.Errorf("storage: read schema version: %w", err)
+	}
+	return version, nil
+}
+
+func (s *Store) applyMigration(migration migration) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("storage: start migration %d: %w", migration.version, err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for _, statement := range migration.statements {
+		if _, err = tx.Exec(statement); err != nil {
+			return fmt.Errorf("storage: migration %d failed: %w", migration.version, err)
 		}
 	}
 
+	if _, err = tx.Exec(`INSERT INTO schema_migrations (version) VALUES (?)`, migration.version); err != nil {
+		return fmt.Errorf("storage: record migration %d: %w", migration.version, err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("storage: commit migration %d: %w", migration.version, err)
+	}
 	return nil
 }
