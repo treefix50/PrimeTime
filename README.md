@@ -7,9 +7,15 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 ## Voraussetzungen
 
 * **Go 1.22** muss installiert sein (entspricht `go.mod`).
-* **ffmpeg** muss verfügbar sein. Unter Windows wird standardmäßig beim Programmstart ein lokales ffmpeg in `tools/ffmpeg` bereitgestellt (Auto-Download).
-  * Der Auto-Download passiert **beim Programmstart** in `internal/ffmpeg/ensure.go`.
-  * Er greift **nur unter Windows**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird er deaktiviert; dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
+* **ffmpeg** muss lokal vorhanden sein und manuell unter `./tools/ffmpeg` abgelegt werden.
+  * **Windows (FFmpeg-Builds ZIP, Ordner enthält `bin/`, `lib/`, `include/`)**:
+    1. ZIP herunterladen und entpacken.
+    2. **Alle Dateien aus `bin/`** nach `tools/ffmpeg/` kopieren.
+       * Muss enthalten: `ffmpeg.exe`, `ffprobe.exe` **und alle `.dll`‑Dateien** aus `bin/`.
+  * **Linux/macOS**:
+    1. Archiv/Installationspaket entpacken.
+    2. **Binaries aus `bin/`** nach `tools/ffmpeg/` kopieren (`ffmpeg` und `ffprobe`).
+  * Es gibt **keinen** Auto-Download mehr; ohne diese Dateien startet PrimeTime nicht.
 * `./media` existiert oder wird beim Start erzeugt. Optional wird eine SQLite-DB unter `./data/primetime.db` angelegt.
 
 ## Start
@@ -20,6 +26,23 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 ./run.ps1 -root ./media -addr :8080 -db ./data/primetime.db
 ```
 
+Erwartete Struktur nach dem manuellen Kopieren (Windows-Beispiel):
+
+```
+tools/
+  ffmpeg/
+    ffmpeg.exe
+    ffprobe.exe
+    avcodec-62.dll
+    avdevice-62.dll
+    avfilter-11.dll
+    avformat-62.dll
+    avutil-60.dll
+    swresample-6.dll
+    swscale-9.dll
+    ... (alle weiteren DLLs aus dem bin-Ordner)
+```
+
 Startet den HTTP-Server und führt einen initialen Scan im `-root`-Verzeichnis aus.
 Standardmäßig nutzt PrimeTime eine SQLite-Datenbank unter `./data/primetime.db`.
 Der Pfad lässt sich mit `-db` anpassen (z. B. `-db :memory:`).
@@ -28,23 +51,10 @@ Weitere Optionen:
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 
-Statt `go run .` sollte unter **Windows** das Skript `./run.ps1` genutzt werden.
-`run.ps1` führt **keinen** ffmpeg-Download aus; es ruft nur (falls nötig) `go mod tidy` und danach `go run .` auf.
-Beim Programmstart **prüft zuerst** `internal/ffmpeg/ensure.go`, ob ffmpeg bereitgestellt werden muss.
-Diese Prüfung und der Auto-Download sind **Windows-spezifisch**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird der
-Auto-Download deaktiviert; dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
-Wenn du ffmpeg manuell einrichtest: Alle Dateien aus `bin/` nach `tools/ffmpeg/` kopieren und sicherstellen,
-dass die DLLs aus `bin/` im selben Ordner wie `ffmpeg.exe`/`ffprobe.exe` liegen, sonst schlagen die
-Validierungen fehl.
-
-### Linux/macOS
-
-```bash
-go run . -root ./media -addr :8080 -db ./data/primetime.db
-```
-
-Auch hier startet der HTTP-Server mit initialem Scan. Die ffmpeg-Prüfung erfolgt beim Programmstart
-in `internal/ffmpeg/ensure.go`; der Windows-spezifische Auto-Download greift auf diesen Plattformen nicht.
+Statt `go run .` sollte unter Windows das Skript `./run.ps1` genutzt werden.
+`run.ps1` prüft zuerst, ob `tools/ffmpeg/ffmpeg.exe` und `tools/ffmpeg/ffprobe.exe` vorhanden und ausführbar sind
+(inklusive der benötigten `.dll`‑Dateien im selben Ordner).
+Anschließend wird `go run .` gestartet. ffmpeg wird **nicht** automatisch heruntergeladen.
 
 ## Beispiele/Kommandos
 
