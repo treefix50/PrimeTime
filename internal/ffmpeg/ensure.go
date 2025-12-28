@@ -61,10 +61,16 @@ func Ensure(ctx context.Context, baseDir string) (string, error) {
 	checksumsPath := filepath.Join(destDir, "checksums.sha256")
 	zipPath := filepath.Join(destDir, "ffmpeg.zip")
 
-	if err := download(ctx, winChecksumsURL, checksumsPath); err != nil {
+	if err := downloadWithRetry(ctx, winChecksumsURL, checksumsPath, 3); err != nil {
+		if p, pathErr := exec.LookPath("ffmpeg"); pathErr == nil {
+			return p, nil
+		}
 		return "", fmt.Errorf("download checksums: %w", err)
 	}
-	if err := download(ctx, winZipURL, zipPath); err != nil {
+	if err := downloadWithRetry(ctx, winZipURL, zipPath, 3); err != nil {
+		if p, pathErr := exec.LookPath("ffmpeg"); pathErr == nil {
+			return p, nil
+		}
 		return "", fmt.Errorf("download ffmpeg zip: %w", err)
 	}
 
@@ -138,6 +144,21 @@ func download(ctx context.Context, url, out string) error {
 		return err
 	}
 	return os.Rename(tmp, out)
+}
+
+func downloadWithRetry(ctx context.Context, url, out string, attempts int) error {
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		if err := download(ctx, url, out); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+		if i < attempts-1 {
+			time.Sleep(2 * time.Second)
+		}
+	}
+	return lastErr
 }
 
 func sha256File(path string) (string, error) {
