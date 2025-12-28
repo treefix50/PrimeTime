@@ -110,7 +110,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 			if query != "" {
 				items = filterItems(items, query)
 			}
-			writeJSON(w, items)
+			writeJSON(w, r, items)
 			return
 		}
 
@@ -122,13 +122,13 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		if query != "" {
 			items = filterItems(items, query)
 		}
-		writeJSON(w, items)
+		writeJSON(w, r, items)
 	case http.MethodPost:
 		if err := s.lib.Scan(); err != nil {
 			http.Error(w, "scan failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, map[string]string{"status": "ok"})
+		writeJSON(w, r, map[string]string{"status": "ok"})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -184,7 +184,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	switch action {
 	case "":
 		// /items/{id}
-		writeJSON(w, item)
+		writeJSON(w, r, item)
 
 	case "stream":
 		// /items/{id}/stream
@@ -200,7 +200,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				if ok && nfo != nil {
-					writeJSON(w, nfo)
+					writeJSON(w, r, nfo)
 					return
 				}
 			}
@@ -210,7 +210,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "no nfo", http.StatusNotFound)
 				return
 			}
-			writeJSON(w, nfo)
+			writeJSON(w, r, nfo)
 			return
 		}
 
@@ -230,9 +230,22 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, v any) {
+func writeJSON(w http.ResponseWriter, r *http.Request, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(v)
+	var buf strings.Builder
+	encoder := json.NewEncoder(&buf)
+	if err := encoder.Encode(v); err != nil {
+		log.Printf("json encode failed for %s %s: %v", r.Method, r.URL.Path, err)
+		if sw, ok := w.(interface{ Written() bool }); ok && sw.Written() {
+			return
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	if sw, ok := w.(interface{ Written() bool }); ok && !sw.Written() {
+		w.WriteHeader(http.StatusOK)
+	}
+	_, _ = w.Write([]byte(buf.String()))
 }
 
 func (s *Server) writePreflightHeaders(w http.ResponseWriter, methods string) {
