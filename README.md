@@ -57,17 +57,19 @@ Weitere Optionen:
 
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
+* `-db-busy-timeout` (SQLite Busy-Timeout; Default: `5s`; `0` deaktiviert)
+* `-db-synchronous` (SQLite Synchronous-Modus; Default: `NORMAL`)
+* `-db-cache-size` (SQLite Cache-Size; Default: `-65536` = ca. 64 MiB)
 
 ### SQLite-Konfiguration (PRAGMA)
 
 Beim Öffnen der Datenbank setzt PrimeTime folgende pragmatische Defaults:
 
 * `PRAGMA journal_mode = WAL;` (bessere Parallelität bei Lesezugriffen)
-* `PRAGMA synchronous = NORMAL;` (schneller bei WAL, akzeptabler Schutz für Medienkatalog)
-* `PRAGMA busy_timeout = 5000;` (vermeidet sofortige Lock-Fehler bei parallelen Zugriffen)
-  * Override möglich über `PRIMETIME_SQLITE_BUSY_TIMEOUT_MS` (Millisekunden).
+* `PRAGMA synchronous = NORMAL;` (schneller bei WAL, akzeptabler Schutz für Medienkatalog; über `-db-synchronous` anpassbar)
+* `PRAGMA busy_timeout = 5000;` (vermeidet sofortige Lock-Fehler bei parallelen Zugriffen; über `-db-busy-timeout` anpassbar)
 * `PRAGMA temp_store = MEMORY;` (temporäre Tabellen/Indizes im RAM für weniger I/O)
-* `PRAGMA cache_size = -65536;` (≈ 64 MiB Cache; negative Werte = KiB)
+* `PRAGMA cache_size = -65536;` (≈ 64 MiB Cache; negative Werte = KiB; über `-db-cache-size` anpassbar)
 * `PRAGMA journal_size_limit = 67108864;` (≈ 64 MiB; begrenzt WAL-/Journal-Wachstum)
 
 Die Werte sind auf einen ausgewogenen Mix aus Performance und Sicherheit ausgelegt und können bei Bedarf
