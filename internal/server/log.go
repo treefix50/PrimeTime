@@ -12,7 +12,8 @@ func logMiddleware(next http.Handler, corsEnabled bool) http.Handler {
 		if corsEnabled {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
-		next.ServeHTTP(w, r)
+		sw := newStatusResponseWriter(w)
+		next.ServeHTTP(sw, r)
 		log.Printf("%s %s (%s)", r.Method, r.URL.Path, time.Since(start))
 	})
 }
