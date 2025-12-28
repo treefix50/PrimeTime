@@ -102,6 +102,26 @@ sqlite3 ./data/primetime.db "SELECT COUNT(*) FROM items;"
 # Erwartet: Anzahl der gefundenen Media-Items
 ```
 
+### Windows-Beispiel (sqlite3.exe mit absolutem Pfad)
+
+```bash
+C:\Users\Benutzername\Downloads\sqlite-tools-win-x64-3510100\sqlite3.exe "C:\PrimeTime-main\data\primetime.db" ".tables"
+```
+
+Alternativ (aus dem Projektverzeichnis):
+
+```bash
+cd C:\PrimeTime-main
+C:\Users\Benutzername\Downloads\sqlite-tools-win-x64-3510100\sqlite3.exe ".\data\primetime.db" ".tables"
+```
+
+### SQLite-Hinweise (sinnvolle Ergänzungen)
+
+* **Pfad klar dokumentieren:** In README/CLI-Beispielen immer den aktiven `-db`‑Pfad mit angeben, damit klar ist, wo die Datenbank liegt.
+* **Schema kurz beschreiben:** Kurzer Abschnitt mit den wichtigsten Tabellen (`media_items`, `nfo`) und ihrer Rolle. Das hilft beim Debugging und beim Client‑Abgleich.
+* **Backup/Restore:** Ein knapper Hinweis, wie man die DB vor Updates/Rescans sichern kann (z. B. Kopieren der `primetime.db`).
+* **Performance bei vielen Medien:** Optional Hinweis auf SQLite‑WAL‑Mode (bei späterem Wachstum), falls parallele Client‑Zugriffe geplant sind.
+
 ## Smoke-Tests (ohne Medien)
 
 ```bash
