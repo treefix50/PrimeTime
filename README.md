@@ -33,6 +33,9 @@ Statt `go run .` sollte unter **Windows** das Skript `./run.ps1` genutzt werden.
 Beim Programmstart **prüft zuerst** `internal/ffmpeg/ensure.go`, ob ffmpeg bereitgestellt werden muss.
 Diese Prüfung und der Auto-Download sind **Windows-spezifisch**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird der
 Auto-Download deaktiviert; dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
+Wenn du ffmpeg manuell einrichtest: Alle Dateien aus `bin/` nach `tools/ffmpeg/` kopieren und sicherstellen,
+dass die DLLs aus `bin/` im selben Ordner wie `ffmpeg.exe`/`ffprobe.exe` liegen, sonst schlagen die
+Validierungen fehl.
 
 ### Linux/macOS
 
