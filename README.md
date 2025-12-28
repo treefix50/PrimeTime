@@ -25,11 +25,13 @@ Kurze Befehle:
 curl http://localhost:8080/health
 curl http://localhost:8080/library
 curl "http://localhost:8080/library?q=matrix"  # Filterung über Query möglich
+curl "http://localhost:8080/library?q=alien"
 curl -X POST http://localhost:8080/library  # triggert einen Rescan
 curl -I http://localhost:8080/items/{id}/stream
 curl http://localhost:8080/items/{id}/nfo
 curl http://localhost:8080/items/{id}/nfo/raw
 ```
+Der Query-Parameter `q` filtert nach Treffern im Titel.
 
 Zusätzliche Smoke-Tests (ohne Medien):
 
