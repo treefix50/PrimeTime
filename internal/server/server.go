@@ -130,7 +130,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, items)
 	case http.MethodPost:
 		if err := s.lib.Scan(); err != nil {
-			http.Error(w, "scan failed: "+err.Error(), http.StatusInternalServerError)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, r, map[string]string{"status": "ok"})
@@ -206,7 +206,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 			nfo, err := ParseNFOFile(item.NFOPath)
 			if err != nil {
-				http.Error(w, "no nfo", http.StatusNotFound)
+				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
 			writeJSON(w, r, nfo)
@@ -215,7 +215,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 		if len(parts) == 3 && parts[2] == "raw" {
 			if item.NFOPath == "" {
-				http.Error(w, "no nfo", http.StatusNotFound)
+				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
 			ServeTextFile(w, r, item.NFOPath, "text/xml; charset=utf-8")
