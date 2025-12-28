@@ -5,7 +5,7 @@ import "fmt"
 const schemaMediaItems = `
 CREATE TABLE IF NOT EXISTS media_items (
 	id TEXT PRIMARY KEY,
-	path TEXT NOT NULL,
+	path TEXT NOT NULL UNIQUE,
 	title TEXT,
 	size INTEGER,
 	modified INTEGER,
@@ -24,11 +24,11 @@ CREATE TABLE IF NOT EXISTS nfo (
 	title TEXT,
 	original_title TEXT,
 	plot TEXT,
-	year INTEGER,
-	rating REAL,
+	year INTEGER CHECK (year IS NULL OR (year >= 1800 AND year <= 3000)),
+	rating REAL CHECK (rating IS NULL OR (rating >= 0 AND rating <= 10)),
 	genres TEXT,
-	season INTEGER,
-	episode INTEGER,
+	season INTEGER CHECK (season IS NULL OR season >= 0),
+	episode INTEGER CHECK (episode IS NULL OR episode >= 0),
 	show_title TEXT,
 	raw_root TEXT,
 	FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS playback_state (
 const schemaLibraryRoots = `
 CREATE TABLE IF NOT EXISTS library_roots (
 	id TEXT PRIMARY KEY,
-	path TEXT NOT NULL,
+	path TEXT NOT NULL UNIQUE,
 	type TEXT NOT NULL,
 	created_at INTEGER NOT NULL
 );`
