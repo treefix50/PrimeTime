@@ -16,6 +16,10 @@ const (
 	errMethodNotAllowed = "method not allowed"
 )
 
+func methodNotAllowed(w http.ResponseWriter) {
+	http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
+}
+
 type Server struct {
 	addr         string
 	lib          *Library
@@ -141,7 +145,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, r, map[string]string{"status": "ok"})
 	default:
-		http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 	}
 }
 
@@ -152,7 +156,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodGet {
-		http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
+		methodNotAllowed(w)
 		return
 	}
 
@@ -268,7 +272,7 @@ func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request, methods s
 		w.WriteHeader(http.StatusOK)
 		return true
 	}
-	http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
+	methodNotAllowed(w)
 	return true
 }
 
