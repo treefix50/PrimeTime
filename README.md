@@ -21,6 +21,8 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 
 ## Start
 
+### Windows (PowerShell)
+
 ```bash
 ./run.ps1 -root ./media -addr :8080 -db ./data/primetime.db
 ```
