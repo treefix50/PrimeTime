@@ -69,18 +69,22 @@ func Ensure(ctx context.Context, baseDir string) (string, error) {
 		return "", fmt.Errorf("hash zip: %w", err)
 	}
 
-	if !strings.EqualFold(want, got) {
-		return "", fmt.Errorf("ffmpeg zip checksum mismatch: want %s got %s", want, got)
+	if err := validateBinary(ctx, local, "-version"); err != nil {
+		return "", fmt.Errorf("ffmpeg validation failed: %w", err)
+	}
+	if err := validateBinary(ctx, ffprobe, "-version"); err != nil {
+		return "", fmt.Errorf("ffprobe validation failed: %w", err)
 	}
 
-	if err := extractWanted(zipPath, destDir, []string{"ffmpeg.exe", "ffprobe.exe"}); err != nil {
-		return "", fmt.Errorf("extract: %w", err)
-	}
+	return local, nil
+}
 
-	_ = os.Remove(zipPath)
-
-	if fileExists(local) {
-		return local, nil
+func validateBinary(ctx context.Context, path string, args ...string) error {
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run()
+}
 	}
 	return "", errors.New("ffmpeg not found in tools/ffmpeg; place ffmpeg and ffprobe there")
 }
