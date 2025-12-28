@@ -56,7 +56,7 @@ func Open(path string) (*Store, error) {
 	}
 
 	store := &Store{db: db}
-	if err := store.EnsureSchema(); err != nil {
+	if err := store.MigrateSchema(); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
