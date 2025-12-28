@@ -20,4 +20,5 @@ go.work.sum
 .env
 
 # Downloaded tools (ffmpeg auto-download)
-tools/ffmpeg/
+tools/ffmpeg/*
+!tools/ffmpeg/.gitkeep
