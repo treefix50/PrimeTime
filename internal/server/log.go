@@ -14,6 +14,12 @@ func logMiddleware(next http.Handler, corsEnabled bool) http.Handler {
 		}
 		sw := newStatusResponseWriter(w)
 		next.ServeHTTP(sw, r)
-		log.Printf("%s %s (%s)", r.Method, r.URL.Path, time.Since(start))
+		log.Printf(
+			"level=info msg=\"http request\" method=%s path=%s status=%d duration=%s",
+			r.Method,
+			r.URL.Path,
+			sw.Status(),
+			time.Since(start),
+		)
 	})
 }
