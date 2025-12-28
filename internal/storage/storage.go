@@ -71,6 +71,50 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+func (s *Store) IntegrityCheck() ([]string, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("storage: missing database connection")
+	}
+	rows, err := s.db.Query("PRAGMA integrity_check")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []string
+	for rows.Next() {
+		var result string
+		if err := rows.Scan(&result); err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (s *Store) Vacuum(target string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+	if target == "" {
+		_, err := s.db.Exec("VACUUM")
+		return err
+	}
+	_, err := s.db.Exec("VACUUM INTO ?", target)
+	return err
+}
+
+func (s *Store) Analyze() error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+	_, err := s.db.Exec("ANALYZE")
+	return err
+}
+
 func envInt(name string, fallback int) int {
 	if value := os.Getenv(name); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil {

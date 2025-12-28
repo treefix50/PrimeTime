@@ -141,6 +141,10 @@ C:\Users\Benutzername\Downloads\sqlite-tools-win-x64-3510100\sqlite3.exe ".\data
 * **Pfad klar dokumentieren:** In README/CLI-Beispielen immer den aktiven `-db`‑Pfad mit angeben, damit klar ist, wo die Datenbank liegt.
 * **Schema kurz beschreiben:** Kurzer Abschnitt mit den wichtigsten Tabellen (`media_items`, `nfo`) und ihrer Rolle. Das hilft beim Debugging und beim Client‑Abgleich.
 * **Backup/Restore:** Ein knapper Hinweis, wie man die DB vor Updates/Rescans sichern kann (z. B. Kopieren der `primetime.db`).
+  * Offline-Backup per `VACUUM INTO` (einmalig, ohne Serverstart): `go run . -db ./data/primetime.db -sqlite-vacuum-into ./backup/primetime.db`.
+  * Alternativ: `-sqlite-vacuum` optimiert die bestehende DB-Datei.
+* **Integritätscheck/Debug:** `go run . -db ./data/primetime.db -sqlite-integrity-check` führt `PRAGMA integrity_check;` aus und beendet sich.
+* **Query-Plan-Pflege:** `go run . -db ./data/primetime.db -sqlite-analyze` führt `ANALYZE;` aus (Statistiken für den Query-Planer).
 * **Performance bei vielen Medien:** Optional Hinweis auf SQLite‑WAL‑Mode (bei späterem Wachstum), falls parallele Client‑Zugriffe geplant sind.
 
 ## Smoke-Tests (ohne Medien)
