@@ -2,6 +2,9 @@ package storage
 
 import (
 	"database/sql"
+	"fmt"
+	"os"
+	"strconv"
 
 	_ "modernc.org/sqlite"
 )
@@ -26,6 +29,32 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	busyTimeoutMs := envInt("PRIMETIME_SQLITE_BUSY_TIMEOUT_MS", 5000)
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMs)); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec("PRAGMA temp_store=MEMORY"); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec("PRAGMA cache_size=-65536"); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec("PRAGMA journal_size_limit=67108864"); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+
 	store := &Store{db: db}
 	if err := store.EnsureSchema(); err != nil {
 		_ = db.Close()
@@ -40,4 +69,13 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+func envInt(name string, fallback int) int {
+	if value := os.Getenv(name); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			return parsed
+		}
+	}
+	return fallback
 }
