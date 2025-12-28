@@ -40,3 +40,9 @@ curl.exe -s -o NUL -w "%{http_code}\n" http://localhost:8080/items/does-not-exis
 curl.exe -s -o NUL -w "%{http_code}\n" http://localhost:8080/items/does-not-exist/stream
 curl.exe -s -o NUL -w "%{http_code}\n" -X POST http://localhost:8080/library  # Rescan
 ```
+
+Hinweis: `/health` funktioniert auch ohne Medien. Optionaler Einzeiler:
+
+```bash
+curl http://localhost:8080/health
+```
