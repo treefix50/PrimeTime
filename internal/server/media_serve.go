@@ -11,14 +11,14 @@ import (
 func ServeVideoFile(w http.ResponseWriter, r *http.Request, path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		http.Error(w, "file not found", http.StatusNotFound)
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	defer f.Close()
 
 	st, err := f.Stat()
 	if err != nil {
-		http.Error(w, "file stat failed", http.StatusInternalServerError)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
@@ -49,7 +49,7 @@ func ServeVideoFile(w http.ResponseWriter, r *http.Request, path string) {
 func ServeTextFile(w http.ResponseWriter, r *http.Request, path, contentType string) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		http.Error(w, "file not found", http.StatusNotFound)
+		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", normalizeTextContentType(contentType))
