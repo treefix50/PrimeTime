@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -42,7 +43,7 @@ func main() {
 	log.Printf("level=info msg=\"ffmpeg ready\" path=%s", ff)
 
 	if err := ensureDBDir(*db); err != nil {
-		log.Fatalf("level=error msg=\"failed to ensure db directory\" path=%s err=%v", *db, err)
+		log.Fatalf("level=error msg=\"failed to ensure db path\" path=%s err=%v", *db, err)
 	}
 
 	store, err := storage.Open(*db)
@@ -76,5 +77,25 @@ func ensureDBDir(path string) error {
 	if path == ":memory:" {
 		return nil
 	}
-	return os.MkdirAll(filepath.Dir(path), 0o755)
+	if info, err := os.Stat(path); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("db path points to a directory")
+		}
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		if os.IsExist(err) {
+			return nil
+		}
+		return err
+	}
+	return file.Close()
 }

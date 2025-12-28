@@ -47,6 +47,12 @@ tools/
 Startet den HTTP-Server und führt einen initialen Scan im `-root`-Verzeichnis aus.
 Standardmäßig nutzt PrimeTime eine SQLite-Datenbank unter `./data/primetime.db`.
 Der Pfad lässt sich mit `-db` anpassen (z. B. `-db :memory:`).
+Pfadregeln für `-db`:
+
+* Der Pfad muss auf eine Datei zeigen (kein Verzeichnis).
+* Das Verzeichnis wird bei Bedarf erstellt.
+* Die Datenbankdatei wird mit restriktiven Rechten angelegt (z. B. `0600`).
+* `:memory:` nutzt eine In‑Memory‑DB ohne Dateipfad.
 Weitere Optionen:
 
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
