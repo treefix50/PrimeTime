@@ -58,7 +58,7 @@ func TestEnsureSchema(t *testing.T) {
 		t.Fatalf("sqlite_master rows: %v", err)
 	}
 
-	for _, table := range []string{"media_items", "nfo"} {
+	for _, table := range []string{"media_items", "nfo", "playback_state", "library_roots", "scan_runs"} {
 		if !found[table] {
 			t.Fatalf("expected table %q to exist", table)
 		}

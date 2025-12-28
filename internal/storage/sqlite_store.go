@@ -1,7 +1,9 @@
 package storage
 
 import (
+	"crypto/sha1"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,6 +11,148 @@ import (
 
 	"github.com/treefix50/primetime/internal/server"
 )
+
+func (s *Store) AddRoot(path, rootType string) (server.LibraryRoot, error) {
+	if s == nil || s.db == nil {
+		return server.LibraryRoot{}, fmt.Errorf("storage: missing database connection")
+	}
+
+	normalizedPath := strings.TrimSpace(path)
+	normalizedType := strings.TrimSpace(rootType)
+	if normalizedPath == "" {
+		return server.LibraryRoot{}, fmt.Errorf("storage: root path is required")
+	}
+	if normalizedType == "" {
+		normalizedType = "library"
+	}
+
+	id := stableRootID(normalizedPath, normalizedType)
+	createdAt := time.Now().Unix()
+	_, err := s.db.Exec(`
+		INSERT INTO library_roots (id, path, type, created_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(id) DO NOTHING
+	`, id, normalizedPath, normalizedType, createdAt)
+	if err != nil {
+		return server.LibraryRoot{}, err
+	}
+
+	var stored server.LibraryRoot
+	var createdAtStored int64
+	if err := s.db.QueryRow(`
+		SELECT id, path, type, created_at
+		FROM library_roots
+		WHERE id = ?
+	`, id).Scan(&stored.ID, &stored.Path, &stored.Type, &createdAtStored); err != nil {
+		return server.LibraryRoot{}, err
+	}
+	stored.CreatedAt = time.Unix(createdAtStored, 0)
+	return stored, nil
+}
+
+func (s *Store) ListRoots() ([]server.LibraryRoot, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("storage: missing database connection")
+	}
+
+	rows, err := s.db.Query(`
+		SELECT id, path, type, created_at
+		FROM library_roots
+		ORDER BY created_at
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roots []server.LibraryRoot
+	for rows.Next() {
+		var root server.LibraryRoot
+		var createdAt int64
+		if err := rows.Scan(&root.ID, &root.Path, &root.Type, &createdAt); err != nil {
+			return nil, err
+		}
+		root.CreatedAt = time.Unix(createdAt, 0)
+		roots = append(roots, root)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return roots, nil
+}
+
+func (s *Store) RemoveRoot(id string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	_, err := s.db.Exec(`DELETE FROM library_roots WHERE id = ?`, id)
+	return err
+}
+
+func (s *Store) StartScanRun(rootID string, startedAt time.Time) (server.ScanRun, error) {
+	if s == nil || s.db == nil {
+		return server.ScanRun{}, fmt.Errorf("storage: missing database connection")
+	}
+	if strings.TrimSpace(rootID) == "" {
+		return server.ScanRun{}, fmt.Errorf("storage: root ID is required")
+	}
+	if startedAt.IsZero() {
+		startedAt = time.Now()
+	}
+	id := scanRunID(rootID, startedAt)
+	_, err := s.db.Exec(`
+		INSERT INTO scan_runs (id, root_id, started_at, status)
+		VALUES (?, ?, ?, ?)
+	`, id, rootID, startedAt.Unix(), "running")
+	if err != nil {
+		return server.ScanRun{}, err
+	}
+	return server.ScanRun{
+		ID:        id,
+		RootID:    rootID,
+		StartedAt: startedAt,
+		Status:    "running",
+	}, nil
+}
+
+func (s *Store) FinishScanRun(id string, finishedAt time.Time) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	if finishedAt.IsZero() {
+		finishedAt = time.Now()
+	}
+	_, err := s.db.Exec(`
+		UPDATE scan_runs
+		SET finished_at = ?, status = ?, error = NULL
+		WHERE id = ?
+	`, finishedAt.Unix(), "success", id)
+	return err
+}
+
+func (s *Store) FailScanRun(id string, finishedAt time.Time, errMsg string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	if finishedAt.IsZero() {
+		finishedAt = time.Now()
+	}
+	_, err := s.db.Exec(`
+		UPDATE scan_runs
+		SET finished_at = ?, status = ?, error = ?
+		WHERE id = ?
+	`, finishedAt.Unix(), "failed", nullString(errMsg), id)
+	return err
+}
 
 func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 	if s == nil || s.db == nil {
@@ -418,4 +562,14 @@ func trimGenres(genres []string) []string {
 		}
 	}
 	return out
+}
+
+func stableRootID(path, rootType string) string {
+	sum := sha1.Sum([]byte(path + ":" + rootType))
+	return hex.EncodeToString(sum[:8])
+}
+
+func scanRunID(rootID string, startedAt time.Time) string {
+	sum := sha1.Sum([]byte(fmt.Sprintf("%s:%d", rootID, startedAt.UnixNano())))
+	return hex.EncodeToString(sum[:8])
 }
