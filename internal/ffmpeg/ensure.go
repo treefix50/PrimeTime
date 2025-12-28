@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,8 +32,8 @@ func Ensure(ctx context.Context, baseDir string) (string, error) {
 
 func validateBinary(ctx context.Context, path string, args ...string) error {
 	cmd := exec.CommandContext(ctx, path, args...)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
 	return cmd.Run()
 }
 
