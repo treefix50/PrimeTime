@@ -10,7 +10,7 @@ import (
 	"github.com/treefix50/primetime/internal/server"
 )
 
-func (s *Store) SaveItems(items []server.MediaItem) error {
+func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
 	}
@@ -54,7 +54,11 @@ func (s *Store) SaveItems(items []server.MediaItem) error {
 		}
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Store) GetAll() ([]server.MediaItem, error) {
