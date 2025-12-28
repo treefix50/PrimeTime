@@ -128,6 +128,9 @@ func (l *Library) Scan() error {
 		}
 		for _, item := range found {
 			if item.NFOPath == "" {
+				if err := l.store.DeleteNFO(item.ID); err != nil {
+					scanErrs = append(scanErrs, err)
+				}
 				continue
 			}
 			nfo, err := ParseNFOFile(item.NFOPath)

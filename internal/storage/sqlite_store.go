@@ -167,8 +167,7 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 	}
 
 	if nfo == nil {
-		_, err := s.db.Exec(`DELETE FROM nfo WHERE media_id = ?`, mediaID)
-		return err
+		return s.DeleteNFO(mediaID)
 	}
 
 	genres := strings.Join(nfo.Genres, ",")
@@ -209,6 +208,15 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 		nullString(nfo.ShowTitle),
 		nullString(nfo.RawRootName),
 	)
+	return err
+}
+
+func (s *Store) DeleteNFO(mediaID string) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("storage: missing database connection")
+	}
+
+	_, err := s.db.Exec(`DELETE FROM nfo WHERE media_id = ?`, mediaID)
 	return err
 }
 
