@@ -163,7 +163,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/items/")
 	parts := strings.Split(path, "/")
 	if len(parts) < 1 || parts[0] == "" {
-		http.NotFound(w, r)
+		http.Error(w, errNotFound, http.StatusNotFound)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !ok {
-		http.NotFound(w, r)
+		http.Error(w, errNotFound, http.StatusNotFound)
 		return
 	}
 
@@ -232,10 +232,10 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		http.NotFound(w, r)
+		http.Error(w, errNotFound, http.StatusNotFound)
 
 	default:
-		http.NotFound(w, r)
+		http.Error(w, errNotFound, http.StatusNotFound)
 	}
 }
 
