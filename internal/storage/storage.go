@@ -3,8 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"strconv"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -13,7 +12,13 @@ type Store struct {
 	db *sql.DB
 }
 
-func Open(path string) (*Store, error) {
+type Options struct {
+	BusyTimeout time.Duration
+	Synchronous string
+	CacheSize   int
+}
+
+func Open(path string, options Options) (*Store, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
@@ -29,12 +34,16 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
-	if _, err := db.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+	synchronous := options.Synchronous
+	if synchronous == "" {
+		synchronous = "NORMAL"
+	}
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA synchronous=%s", synchronous)); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 
-	busyTimeoutMs := envInt("PRIMETIME_SQLITE_BUSY_TIMEOUT_MS", 5000)
+	busyTimeoutMs := int(options.BusyTimeout / time.Millisecond)
 	if _, err := db.Exec(fmt.Sprintf("PRAGMA busy_timeout=%d", busyTimeoutMs)); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -45,7 +54,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 
-	if _, err := db.Exec("PRAGMA cache_size=-65536"); err != nil {
+	if _, err := db.Exec(fmt.Sprintf("PRAGMA cache_size=%d", options.CacheSize)); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -113,13 +122,4 @@ func (s *Store) Analyze() error {
 	}
 	_, err := s.db.Exec("ANALYZE")
 	return err
-}
-
-func envInt(name string, fallback int) int {
-	if value := os.Getenv(name); value != "" {
-		if parsed, err := strconv.Atoi(value); err == nil {
-			return parsed
-		}
-	}
-	return fallback
 }

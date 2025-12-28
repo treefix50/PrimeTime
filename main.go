@@ -21,6 +21,9 @@ func main() {
 		root           = flag.String("root", "./media", "media root directory")
 		addr           = flag.String("addr", ":8080", "listen address")
 		db             = flag.String("db", defaultDBPath(), "sqlite database path")
+		dbBusyTimeout  = flag.Duration("db-busy-timeout", 5*time.Second, "sqlite busy timeout (e.g. 5s, 0 to disable)")
+		dbSynchronous  = flag.String("db-synchronous", "NORMAL", "sqlite synchronous mode (OFF, NORMAL, FULL, EXTRA)")
+		dbCacheSize    = flag.Int("db-cache-size", -65536, "sqlite cache size (negative values are KiB)")
 		scan           = flag.String("scan-interval", "10m", "media scan interval (e.g. 10m, 0 to disable)")
 		cors           = flag.Bool("cors", false, "enable CORS headers for API responses")
 		integrityCheck = flag.Bool("sqlite-integrity-check", false, "run PRAGMA integrity_check and exit")
@@ -30,7 +33,13 @@ func main() {
 	)
 	flag.Parse()
 
-	if err := runSQLiteMaintenance(*db, *integrityCheck, *vacuum, *vacuumInto, *analyze); err != nil {
+	options := storage.Options{
+		BusyTimeout: *dbBusyTimeout,
+		Synchronous: *dbSynchronous,
+		CacheSize:   *dbCacheSize,
+	}
+
+	if err := runSQLiteMaintenance(*db, options, *integrityCheck, *vacuum, *vacuumInto, *analyze); err != nil {
 		log.Fatalf("level=error msg=\"sqlite maintenance failed\" err=%v", err)
 	}
 
@@ -54,7 +63,7 @@ func main() {
 		log.Fatalf("level=error msg=\"failed to ensure db path\" path=%s err=%v", *db, err)
 	}
 
-	store, err := storage.Open(*db)
+	store, err := storage.Open(*db, options)
 	if err != nil {
 		log.Fatalf("level=error msg=\"failed to open storage\" path=%s err=%v", *db, err)
 	}
@@ -108,7 +117,7 @@ func ensureDBDir(path string) error {
 	return file.Close()
 }
 
-func runSQLiteMaintenance(dbPath string, integrityCheck, vacuum bool, vacuumInto string, analyze bool) error {
+func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck, vacuum bool, vacuumInto string, analyze bool) error {
 	if !integrityCheck && !vacuum && vacuumInto == "" && !analyze {
 		return nil
 	}
@@ -124,7 +133,7 @@ func runSQLiteMaintenance(dbPath string, integrityCheck, vacuum bool, vacuumInto
 		}
 	}
 
-	store, err := storage.Open(dbPath)
+	store, err := storage.Open(dbPath, options)
 	if err != nil {
 		return err
 	}
