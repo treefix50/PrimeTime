@@ -196,3 +196,48 @@ func TestGetAll(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteItems(t *testing.T) {
+	store := newTestStore(t, true)
+
+	items := []server.MediaItem{
+		{
+			ID:        "item-1",
+			Title:     "First",
+			VideoPath: "/tmp/first.mkv",
+			Size:      100,
+			Modified:  time.Unix(1700000000, 0),
+		},
+		{
+			ID:        "item-2",
+			Title:     "Second",
+			VideoPath: "/tmp/second.mkv",
+			Size:      200,
+			Modified:  time.Unix(1700000100, 0),
+		},
+	}
+
+	if err := store.SaveItems(items); err != nil {
+		t.Fatalf("SaveItems() error = %v", err)
+	}
+
+	if err := store.DeleteItems([]string{"item-1"}); err != nil {
+		t.Fatalf("DeleteItems() error = %v", err)
+	}
+
+	_, ok, err := store.GetByID("item-1")
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if ok {
+		t.Fatalf("expected item-1 to be deleted")
+	}
+
+	_, ok, err = store.GetByID("item-2")
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if !ok {
+		t.Fatalf("expected item-2 to remain")
+	}
+}
