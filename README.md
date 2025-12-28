@@ -7,10 +7,9 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 ## Voraussetzungen
 
 * **Go 1.22** muss installiert sein (entspricht `go.mod`).
-* **ffmpeg** muss lokal vorhanden sein und manuell unter `./tools/ffmpeg` abgelegt werden.
-  * Windows: `tools/ffmpeg/ffmpeg.exe` und `tools/ffmpeg/ffprobe.exe`
-  * Linux/macOS: `tools/ffmpeg/ffmpeg` und `tools/ffmpeg/ffprobe`
-  * Es gibt **keinen** Auto-Download mehr.
+* **ffmpeg** muss verfügbar sein. Unter Windows wird standardmäßig beim Programmstart ein lokales ffmpeg in `tools/ffmpeg` bereitgestellt (Auto-Download).
+  * Der Auto-Download passiert **beim Programmstart** in `internal/ffmpeg/ensure.go`.
+  * Er greift **nur unter Windows**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird er deaktiviert; dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
 * `./media` existiert oder wird beim Start erzeugt. Optional wird eine SQLite-DB unter `./data/primetime.db` angelegt.
 
 ## Start
@@ -28,8 +27,10 @@ Weitere Optionen:
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 
 Statt `go run .` sollte das Skript `./run.ps1` genutzt werden.
-`run.ps1` ruft nur (falls nötig) `go mod tidy` und danach `go run .` auf.
-ffmpeg wird **nicht** automatisch heruntergeladen; die Dateien müssen vorher unter `tools/ffmpeg` vorhanden sein.
+`run.ps1` führt **keinen** ffmpeg-Download aus; es ruft nur (falls nötig) `go mod tidy` und danach `go run .` auf.
+Der **ffmpeg-Auto-Download passiert beim Programmstart** (siehe `internal/ffmpeg/ensure.go`) und
+greift **nur unter Windows**. Mit `PRIMETIME_NO_FFMPEG_DOWNLOAD=1` wird der Auto-Download deaktiviert;
+dann muss ffmpeg lokal vorhanden sein (im `PATH` oder `tools/ffmpeg`).
 
 ## Beispiele/Kommandos
 
