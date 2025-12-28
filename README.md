@@ -12,6 +12,10 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 
 Standardmäßig nutzt PrimeTime eine SQLite-Datenbank unter `./data/primetime.db`.
 Der Pfad lässt sich mit `-db` anpassen (z. B. `-db :memory:`).
+Weitere Optionen:
+
+* `-scan-interval` (Intervall für automatische Scans; `0` deaktiviert die Scans)
+* `-cors` (CORS-Header aktivieren)
 
 Statt `go run .` sollte das Skript `./run.ps1` genutzt werden.
 
@@ -20,8 +24,11 @@ Kurze Befehle:
 ```bash
 curl http://localhost:8080/health
 curl http://localhost:8080/library
+curl "http://localhost:8080/library?q=matrix"  # Filterung über Query möglich
 curl -X POST http://localhost:8080/library  # triggert einen Rescan
 curl -I http://localhost:8080/items/{id}/stream
+curl http://localhost:8080/items/{id}/nfo
+curl http://localhost:8080/items/{id}/nfo/raw
 ```
 
 Zusätzliche Smoke-Tests (ohne Medien):
