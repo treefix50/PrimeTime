@@ -8,6 +8,7 @@ Es gibt kein Web-Interface und keine Authentifizierung.
 
 * **Go 1.22** muss installiert sein (entspricht `go.mod`).
 * **ffmpeg** muss lokal vorhanden sein und manuell unter `./tools/ffmpeg` abgelegt werden.
+  * Der Ordner `tools/ffmpeg` ist im ZIP bereits vorhanden (leer), damit die Dateien direkt dort abgelegt werden können.
   * **Windows (FFmpeg-Builds ZIP, Ordner enthält `bin/`, `lib/`, `include/`)**:
     1. ZIP herunterladen und entpacken.
     2. **Alle Dateien aus `bin/`** nach `tools/ffmpeg/` kopieren.
