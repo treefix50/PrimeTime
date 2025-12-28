@@ -10,6 +10,12 @@ import (
 	"time"
 )
 
+const (
+	errInternal         = "internal server error"
+	errNotFound         = "not found"
+	errMethodNotAllowed = "method not allowed"
+)
+
 type Server struct {
 	addr         string
 	lib          *Library
@@ -121,7 +127,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 
 		items, err := s.lib.store.GetAll()
 		if err != nil {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+			http.Error(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 		if query != "" {
@@ -130,12 +136,12 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, items)
 	case http.MethodPost:
 		if err := s.lib.Scan(); err != nil {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+			http.Error(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, r, map[string]string{"status": "ok"})
 	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -146,7 +152,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -171,7 +177,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		var err error
 		item, ok, err = s.lib.store.GetByID(id)
 		if err != nil {
-			http.Error(w, "internal server error", http.StatusInternalServerError)
+			http.Error(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 	}
@@ -195,7 +201,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			if s.lib.store != nil {
 				nfo, ok, err := s.lib.store.GetNFO(item.ID)
 				if err != nil {
-					http.Error(w, "internal server error", http.StatusInternalServerError)
+					http.Error(w, errInternal, http.StatusInternalServerError)
 					return
 				}
 				if ok && nfo != nil {
@@ -206,7 +212,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 			nfo, err := ParseNFOFile(item.NFOPath)
 			if err != nil {
-				http.Error(w, "not found", http.StatusNotFound)
+				http.Error(w, errNotFound, http.StatusNotFound)
 				return
 			}
 			writeJSON(w, r, nfo)
@@ -215,7 +221,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 		if len(parts) == 3 && parts[2] == "raw" {
 			if item.NFOPath == "" {
-				http.Error(w, "not found", http.StatusNotFound)
+				http.Error(w, errNotFound, http.StatusNotFound)
 				return
 			}
 			ServeTextFile(w, r, item.NFOPath, "text/xml; charset=utf-8")
@@ -238,7 +244,7 @@ func writeJSON(w http.ResponseWriter, r *http.Request, v any) {
 		if sw, ok := w.(interface{ Written() bool }); ok && sw.Written() {
 			return
 		}
-		http.Error(w, "internal server error", http.StatusInternalServerError)
+		http.Error(w, errInternal, http.StatusInternalServerError)
 		return
 	}
 	if sw, ok := w.(interface{ Written() bool }); ok && !sw.Written() {
@@ -262,7 +268,7 @@ func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request, methods s
 		w.WriteHeader(http.StatusOK)
 		return true
 	}
-	http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
 	return true
 }
 
