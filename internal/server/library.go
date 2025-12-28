@@ -32,13 +32,20 @@ type Library struct {
 	lastScan time.Time
 }
 
+func storeReadOnly(store MediaStore) bool {
+	if store == nil {
+		return false
+	}
+	return store.ReadOnly()
+}
+
 func NewLibrary(root string, store MediaStore) (*Library, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
 	items := map[string]MediaItem{}
 	var rootID string
-	if store != nil {
+	if store != nil && !storeReadOnly(store) {
 		rootEntry, err := store.AddRoot(root, "library")
 		if err != nil {
 			return nil, err

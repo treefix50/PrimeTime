@@ -4,6 +4,7 @@ import "time"
 
 // MediaStore defines the storage operations used for media metadata.
 type MediaStore interface {
+	ReadOnly() bool
 	AddRoot(path, rootType string) (LibraryRoot, error)
 	ListRoots() ([]LibraryRoot, error)
 	RemoveRoot(id string) error

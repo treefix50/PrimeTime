@@ -25,6 +25,7 @@ type Server struct {
 	lib          *Library
 	http         *http.Server
 	cors         bool
+	readOnly     bool
 	scanInterval time.Duration
 	scanTicker   *time.Ticker
 	scanStop     chan struct{}
@@ -37,10 +38,13 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 	if err != nil {
 		return nil, err
 	}
-	// initial scan
-	if err := lib.Scan(); err != nil {
-		log.Printf("scan failed (initial): %v", err)
-		return nil, err
+	readOnly := storeReadOnly(store)
+	if !readOnly {
+		// initial scan
+		if err := lib.Scan(); err != nil {
+			log.Printf("scan failed (initial): %v", err)
+			return nil, err
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -49,10 +53,11 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 		addr:         addr,
 		lib:          lib,
 		cors:         cors,
+		readOnly:     readOnly,
 		scanInterval: scanInterval,
 	}
 
-	if s.scanInterval > 0 {
+	if s.scanInterval > 0 && !s.readOnly {
 		s.scanTicker = time.NewTicker(s.scanInterval)
 		s.scanStop = make(chan struct{})
 		s.scanWg.Add(1)
@@ -139,6 +144,10 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, r, items)
 	case http.MethodPost:
+		if s.readOnly {
+			http.Error(w, "read-only mode", http.StatusForbidden)
+			return
+		}
 		if err := s.lib.Scan(); err != nil {
 			http.Error(w, errInternal, http.StatusInternalServerError)
 			return
@@ -266,6 +275,10 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, r, state)
 		case http.MethodPost:
+			if s.readOnly {
+				http.Error(w, "read-only mode", http.StatusForbidden)
+				return
+			}
 			var payload PlaybackEvent
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 				http.Error(w, "bad request", http.StatusBadRequest)

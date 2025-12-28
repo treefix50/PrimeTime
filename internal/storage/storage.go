@@ -3,23 +3,52 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	db *sql.DB
+	db       *sql.DB
+	readOnly bool
 }
 
 type Options struct {
 	BusyTimeout time.Duration
 	Synchronous string
 	CacheSize   int
+	ReadOnly    bool
+}
+
+func sqliteDSN(path string, readOnly bool) (string, error) {
+	if !readOnly {
+		return path, nil
+	}
+	if path == ":memory:" {
+		return "", fmt.Errorf("storage: read-only mode requires a file-backed database")
+	}
+	dsn := path
+	if !strings.HasPrefix(dsn, "file:") {
+		dsn = "file:" + dsn
+	}
+	parsed, err := url.Parse(dsn)
+	if err != nil {
+		return "", err
+	}
+	query := parsed.Query()
+	query.Set("mode", "ro")
+	parsed.RawQuery = query.Encode()
+	return parsed.String(), nil
 }
 
 func Open(path string, options Options) (*Store, error) {
-	db, err := sql.Open("sqlite", path)
+	dsn, err := sqliteDSN(path, options.ReadOnly)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -29,18 +58,19 @@ func Open(path string, options Options) (*Store, error) {
 		return nil, err
 	}
 
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	synchronous := options.Synchronous
-	if synchronous == "" {
-		synchronous = "NORMAL"
-	}
-	if _, err := db.Exec(fmt.Sprintf("PRAGMA synchronous=%s", synchronous)); err != nil {
-		_ = db.Close()
-		return nil, err
+	if !options.ReadOnly {
+		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		synchronous := options.Synchronous
+		if synchronous == "" {
+			synchronous = "NORMAL"
+		}
+		if _, err := db.Exec(fmt.Sprintf("PRAGMA synchronous=%s", synchronous)); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 	}
 
 	busyTimeoutMs := int(options.BusyTimeout / time.Millisecond)
@@ -59,15 +89,19 @@ func Open(path string, options Options) (*Store, error) {
 		return nil, err
 	}
 
-	if _, err := db.Exec("PRAGMA journal_size_limit=67108864"); err != nil {
-		_ = db.Close()
-		return nil, err
+	if !options.ReadOnly {
+		if _, err := db.Exec("PRAGMA journal_size_limit=67108864"); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 	}
 
-	store := &Store{db: db}
-	if err := store.MigrateSchema(); err != nil {
-		_ = db.Close()
-		return nil, err
+	store := &Store{db: db, readOnly: options.ReadOnly}
+	if !options.ReadOnly {
+		if err := store.MigrateSchema(); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
 	}
 
 	return store, nil
@@ -78,6 +112,13 @@ func (s *Store) Close() error {
 		return nil
 	}
 	return s.db.Close()
+}
+
+func (s *Store) ReadOnly() bool {
+	if s == nil {
+		return false
+	}
+	return s.readOnly
 }
 
 func (s *Store) IntegrityCheck() ([]string, error) {
