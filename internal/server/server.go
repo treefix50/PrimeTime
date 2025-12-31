@@ -18,10 +18,6 @@ const (
 	manualScanRateLimit = 30 * time.Second
 )
 
-func methodNotAllowed(w http.ResponseWriter) {
-	http.Error(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
-}
-
 type Server struct {
 	addr           string
 	lib            *Library
@@ -36,6 +32,10 @@ type Server struct {
 	scanWg         sync.WaitGroup
 	manualScanMu   sync.Mutex
 	lastManualScan time.Time
+}
+
+func (s *Server) methodNotAllowed(w http.ResponseWriter) {
+	s.writeError(w, errMethodNotAllowed, http.StatusMethodNotAllowed)
 }
 
 type VersionInfo struct {
@@ -136,7 +136,7 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		s.methodNotAllowed(w)
 		return
 	}
 	writeJSON(w, r, s.version)
@@ -147,12 +147,12 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
-		methodNotAllowed(w)
+		s.methodNotAllowed(w)
 		return
 	}
 	totalItems, lastScan, err := s.lib.Stats()
 	if err != nil {
-		http.Error(w, errInternal, http.StatusInternalServerError)
+		s.writeError(w, errInternal, http.StatusInternalServerError)
 		return
 	}
 	writeJSON(w, r, map[string]any{
@@ -180,7 +180,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 
 		items, err := s.lib.store.GetAll()
 		if err != nil {
-			http.Error(w, errInternal, http.StatusInternalServerError)
+			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 		if query != "" {
@@ -189,20 +189,20 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, items)
 	case http.MethodPost:
 		if s.readOnly {
-			http.Error(w, "read-only mode", http.StatusForbidden)
+			s.writeError(w, "read-only mode", http.StatusForbidden)
 			return
 		}
 		if ok, wait := s.allowManualScan(); !ok {
-			http.Error(w, manualScanError(wait), http.StatusTooManyRequests)
+			s.writeError(w, manualScanError(wait), http.StatusTooManyRequests)
 			return
 		}
 		if err := s.lib.Scan(); err != nil {
-			http.Error(w, errInternal, http.StatusInternalServerError)
+			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, r, map[string]string{"status": "ok"})
 	default:
-		methodNotAllowed(w)
+		s.methodNotAllowed(w)
 	}
 }
 
@@ -238,14 +238,14 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodGet && r.Method != http.MethodPost {
-		methodNotAllowed(w)
+		s.methodNotAllowed(w)
 		return
 	}
 
 	path := strings.TrimPrefix(r.URL.Path, "/items/")
 	parts := strings.Split(path, "/")
 	if len(parts) < 1 || parts[0] == "" {
-		http.Error(w, errNotFound, http.StatusNotFound)
+		s.writeError(w, errNotFound, http.StatusNotFound)
 		return
 	}
 
@@ -263,12 +263,12 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		var err error
 		item, ok, err = s.lib.store.GetByID(id)
 		if err != nil {
-			http.Error(w, errInternal, http.StatusInternalServerError)
+			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 	}
 	if !ok {
-		http.Error(w, errNotFound, http.StatusNotFound)
+		s.writeError(w, errNotFound, http.StatusNotFound)
 		return
 	}
 
@@ -276,7 +276,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	case "":
 		// /items/{id}
 		if r.Method != http.MethodGet {
-			methodNotAllowed(w)
+			s.methodNotAllowed(w)
 			return
 		}
 		writeJSON(w, r, item)
@@ -284,7 +284,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	case "stream":
 		// /items/{id}/stream
 		if r.Method != http.MethodGet {
-			methodNotAllowed(w)
+			s.methodNotAllowed(w)
 			return
 		}
 		ServeVideoFile(w, r, item.VideoPath)
@@ -292,14 +292,14 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	case "nfo":
 		// /items/{id}/nfo  OR  /items/{id}/nfo/raw
 		if r.Method != http.MethodGet {
-			methodNotAllowed(w)
+			s.methodNotAllowed(w)
 			return
 		}
 		if len(parts) == 2 {
 			if s.lib.store != nil {
 				nfo, ok, err := s.lib.store.GetNFO(item.ID)
 				if err != nil {
-					http.Error(w, errInternal, http.StatusInternalServerError)
+					s.writeError(w, errInternal, http.StatusInternalServerError)
 					return
 				}
 				if ok && nfo != nil {
@@ -310,7 +310,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 			nfo, err := ParseNFOFile(item.NFOPath)
 			if err != nil {
-				http.Error(w, errNotFound, http.StatusNotFound)
+				s.writeError(w, errNotFound, http.StatusNotFound)
 				return
 			}
 			writeJSON(w, r, nfo)
@@ -319,18 +319,18 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 		if len(parts) == 3 && parts[2] == "raw" {
 			if item.NFOPath == "" {
-				http.Error(w, errNotFound, http.StatusNotFound)
+				s.writeError(w, errNotFound, http.StatusNotFound)
 				return
 			}
 			ServeTextFile(w, r, item.NFOPath, "text/xml; charset=utf-8")
 			return
 		}
 
-		http.Error(w, errNotFound, http.StatusNotFound)
+		s.writeError(w, errNotFound, http.StatusNotFound)
 
 	case "playback":
 		if s.lib.store == nil {
-			http.Error(w, errNotFound, http.StatusNotFound)
+			s.writeError(w, errNotFound, http.StatusNotFound)
 			return
 		}
 
@@ -339,22 +339,22 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			clientID := strings.TrimSpace(r.URL.Query().Get("clientId"))
 			state, ok, err := s.lib.store.GetPlaybackState(item.ID, clientID)
 			if err != nil {
-				http.Error(w, errInternal, http.StatusInternalServerError)
+				s.writeError(w, errInternal, http.StatusInternalServerError)
 				return
 			}
 			if !ok || state == nil {
-				http.Error(w, errNotFound, http.StatusNotFound)
+				s.writeError(w, errNotFound, http.StatusNotFound)
 				return
 			}
 			writeJSON(w, r, state)
 		case http.MethodPost:
 			if s.readOnly {
-				http.Error(w, "read-only mode", http.StatusForbidden)
+				s.writeError(w, "read-only mode", http.StatusForbidden)
 				return
 			}
 			var payload PlaybackEvent
 			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				s.writeError(w, "bad request", http.StatusBadRequest)
 				return
 			}
 
@@ -363,7 +363,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 				event = "progress"
 			}
 			if event != "progress" && event != "stop" {
-				http.Error(w, "bad request", http.StatusBadRequest)
+				s.writeError(w, "bad request", http.StatusBadRequest)
 				return
 			}
 
@@ -374,7 +374,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			shouldDelete := position <= 0 || duration <= 0 || (event == "stop" && position >= duration)
 			if shouldDelete {
 				if err := s.lib.store.DeletePlaybackState(item.ID, clientID); err != nil {
-					http.Error(w, errInternal, http.StatusInternalServerError)
+					s.writeError(w, errInternal, http.StatusInternalServerError)
 					return
 				}
 				writeJSON(w, r, map[string]string{"status": "ok"})
@@ -382,16 +382,16 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err := s.lib.store.UpsertPlaybackState(item.ID, position, duration, clientID); err != nil {
-				http.Error(w, errInternal, http.StatusInternalServerError)
+				s.writeError(w, errInternal, http.StatusInternalServerError)
 				return
 			}
 			writeJSON(w, r, map[string]string{"status": "ok"})
 		default:
-			methodNotAllowed(w)
+			s.methodNotAllowed(w)
 		}
 
 	default:
-		http.Error(w, errNotFound, http.StatusNotFound)
+		s.writeError(w, errNotFound, http.StatusNotFound)
 	}
 }
 
@@ -419,6 +419,11 @@ func (s *Server) writePreflightHeaders(w http.ResponseWriter, methods string) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 }
 
+func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
+	setCORSHeaders(w, s.cors)
+	http.Error(w, message, code)
+}
+
 func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request, methods string) bool {
 	if r.Method != http.MethodOptions {
 		return false
@@ -428,7 +433,7 @@ func (s *Server) handleOptions(w http.ResponseWriter, r *http.Request, methods s
 		w.WriteHeader(http.StatusOK)
 		return true
 	}
-	methodNotAllowed(w)
+	s.methodNotAllowed(w)
 	return true
 }
 
