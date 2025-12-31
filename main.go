@@ -39,8 +39,10 @@ func main() {
 		vacuum         = flag.Bool("sqlite-vacuum", false, "run VACUUM and exit")
 		vacuumInto     = flag.String("sqlite-vacuum-into", "", "run VACUUM INTO <path> and exit")
 		analyze        = flag.Bool("sqlite-analyze", false, "run ANALYZE and exit")
+		extensions     = flag.String("extensions", "", "comma-separated list of allowed media extensions (e.g. .mp4,.mkv)")
 	)
 	flag.Parse()
+	extensionList := parseExtensions(*extensions)
 
 	options := storage.Options{
 		BusyTimeout: *dbBusyTimeout,
@@ -93,7 +95,7 @@ func main() {
 		Commit:    commit,
 		BuildDate: buildDate,
 	}
-	s, err := server.New(*root, *addr, store, scanInterval, *cors, versionInfo)
+	s, err := server.New(*root, *addr, store, scanInterval, *cors, versionInfo, extensionList)
 	if err != nil {
 		log.Fatalf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 	}
@@ -178,6 +180,22 @@ func dbFilePath(path string) string {
 		return dbPath
 	}
 	return unescaped
+}
+
+func parseExtensions(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	extensions := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		extensions = append(extensions, trimmed)
+	}
+	return extensions
 }
 
 func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck, vacuum bool, vacuumInto string, analyze bool) (bool, error) {
