@@ -26,6 +26,7 @@ type Server struct {
 	http         *http.Server
 	cors         bool
 	readOnly     bool
+	version      VersionInfo
 	scanInterval time.Duration
 	scanTicker   *time.Ticker
 	scanStop     chan struct{}
@@ -33,7 +34,13 @@ type Server struct {
 	scanWg       sync.WaitGroup
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool) (*Server, error) {
+type VersionInfo struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildDate string `json:"buildDate"`
+}
+
+func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool, version VersionInfo) (*Server, error) {
 	lib, err := NewLibrary(root, store)
 	if err != nil {
 		return nil, err
@@ -54,6 +61,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 		lib:          lib,
 		cors:         cors,
 		readOnly:     readOnly,
+		version:      version,
 		scanInterval: scanInterval,
 	}
 
@@ -65,6 +73,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 	}
 
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/version", s.handleVersion)
 	mux.HandleFunc("/library", s.handleLibrary)
 	mux.HandleFunc("/items/", s.handleItems)
 
@@ -115,6 +124,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", textContentType)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	writeJSON(w, r, s.version)
 }
 
 func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
