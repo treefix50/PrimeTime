@@ -215,6 +215,23 @@ func (l *Library) All() []MediaItem {
 	return out
 }
 
+func (l *Library) Stats() (int, time.Time, error) {
+	l.mu.RLock()
+	lastScan := l.lastScan
+	count := len(l.items)
+	l.mu.RUnlock()
+
+	if l.store == nil {
+		return count, lastScan, nil
+	}
+
+	items, err := l.store.GetAll()
+	if err != nil {
+		return count, lastScan, err
+	}
+	return len(items), lastScan, nil
+}
+
 func (l *Library) Get(id string) (MediaItem, bool) {
 	if l.store != nil {
 		item, ok, err := l.store.GetByID(id)

@@ -73,6 +73,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, cors b
 	}
 
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/stats", s.handleStats)
 	mux.HandleFunc("/version", s.handleVersion)
 	mux.HandleFunc("/library", s.handleLibrary)
 	mux.HandleFunc("/items/", s.handleItems)
@@ -135,6 +136,25 @@ func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, r, s.version)
+}
+
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	totalItems, lastScan, err := s.lib.Stats()
+	if err != nil {
+		http.Error(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, map[string]any{
+		"totalItems": totalItems,
+		"lastScan":   lastScan,
+	})
 }
 
 func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
