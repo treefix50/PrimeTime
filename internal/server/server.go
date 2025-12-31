@@ -23,6 +23,7 @@ type Server struct {
 	lib            *Library
 	http           *http.Server
 	cors           bool
+	jsonErrors     bool
 	readOnly       bool
 	version        VersionInfo
 	scanInterval   time.Duration
@@ -44,7 +45,7 @@ type VersionInfo struct {
 	BuildDate string `json:"buildDate"`
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, version VersionInfo, extensions []string) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, extensions []string) (*Server, error) {
 	lib, err := NewLibrary(root, store, extensions)
 	if err != nil {
 		return nil, err
@@ -64,6 +65,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		addr:         addr,
 		lib:          lib,
 		cors:         cors,
+		jsonErrors:   jsonErrors,
 		readOnly:     readOnly,
 		version:      version,
 		scanInterval: scanInterval,
@@ -445,6 +447,14 @@ func (s *Server) writePreflightHeaders(w http.ResponseWriter, methods string) {
 
 func (s *Server) writeError(w http.ResponseWriter, message string, code int) {
 	setCORSHeaders(w, s.cors)
+	if s.jsonErrors {
+		w.Header().Set("Content-Type", jsonContentType)
+		w.WriteHeader(code)
+		if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
+			log.Printf("json encode failed for error response: %v", err)
+		}
+		return
+	}
 	http.Error(w, message, code)
 }
 
