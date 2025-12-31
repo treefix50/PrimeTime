@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ const (
 	errInternal         = "internal server error"
 	errNotFound         = "not found"
 	errMethodNotAllowed = "method not allowed"
+	manualScanRateLimit = 30 * time.Second
 )
 
 func methodNotAllowed(w http.ResponseWriter) {
@@ -21,17 +23,19 @@ func methodNotAllowed(w http.ResponseWriter) {
 }
 
 type Server struct {
-	addr         string
-	lib          *Library
-	http         *http.Server
-	cors         bool
-	readOnly     bool
-	version      VersionInfo
-	scanInterval time.Duration
-	scanTicker   *time.Ticker
-	scanStop     chan struct{}
-	scanStopOnce sync.Once
-	scanWg       sync.WaitGroup
+	addr           string
+	lib            *Library
+	http           *http.Server
+	cors           bool
+	readOnly       bool
+	version        VersionInfo
+	scanInterval   time.Duration
+	scanTicker     *time.Ticker
+	scanStop       chan struct{}
+	scanStopOnce   sync.Once
+	scanWg         sync.WaitGroup
+	manualScanMu   sync.Mutex
+	lastManualScan time.Time
 }
 
 type VersionInfo struct {
@@ -188,6 +192,10 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "read-only mode", http.StatusForbidden)
 			return
 		}
+		if ok, wait := s.allowManualScan(); !ok {
+			http.Error(w, manualScanError(wait), http.StatusTooManyRequests)
+			return
+		}
 		if err := s.lib.Scan(); err != nil {
 			http.Error(w, errInternal, http.StatusInternalServerError)
 			return
@@ -196,6 +204,31 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	default:
 		methodNotAllowed(w)
 	}
+}
+
+func (s *Server) allowManualScan() (bool, time.Duration) {
+	s.manualScanMu.Lock()
+	defer s.manualScanMu.Unlock()
+
+	now := time.Now()
+	if s.lastManualScan.IsZero() {
+		s.lastManualScan = now
+		return true, 0
+	}
+	elapsed := now.Sub(s.lastManualScan)
+	if elapsed < manualScanRateLimit {
+		return false, manualScanRateLimit - elapsed
+	}
+	s.lastManualScan = now
+	return true, 0
+}
+
+func manualScanError(wait time.Duration) string {
+	waitSeconds := int(wait.Seconds())
+	if waitSeconds < 1 {
+		waitSeconds = 1
+	}
+	return fmt.Sprintf("rescan zu früh, bitte in %ds erneut versuchen", waitSeconds)
 }
 
 // Routes under /items/{id}[/{action}...]
