@@ -43,8 +43,12 @@ func main() {
 		ReadOnly:    *dbReadOnly,
 	}
 
-	if err := runSQLiteMaintenance(*db, options, *integrityCheck, *vacuum, *vacuumInto, *analyze); err != nil {
+	shouldExit, err := runSQLiteMaintenance(*db, options, *integrityCheck, *vacuum, *vacuumInto, *analyze)
+	if err != nil {
 		log.Fatalf("level=error msg=\"sqlite maintenance failed\" err=%v", err)
+	}
+	if shouldExit {
+		return
 	}
 
 	scanInterval, err := time.ParseDuration(*scan)
@@ -164,34 +168,34 @@ func dbFilePath(path string) string {
 	return unescaped
 }
 
-func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck, vacuum bool, vacuumInto string, analyze bool) error {
+func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck, vacuum bool, vacuumInto string, analyze bool) (bool, error) {
 	if !integrityCheck && !vacuum && vacuumInto == "" && !analyze {
-		return nil
+		return false, nil
 	}
 	if options.ReadOnly && (vacuum || vacuumInto != "" || analyze) {
-		return fmt.Errorf("read-only mode does not allow sqlite vacuum/analyze")
+		return false, fmt.Errorf("read-only mode does not allow sqlite vacuum/analyze")
 	}
 	if vacuum && vacuumInto != "" {
-		return fmt.Errorf("choose either -sqlite-vacuum or -sqlite-vacuum-into, not both")
+		return false, fmt.Errorf("choose either -sqlite-vacuum or -sqlite-vacuum-into, not both")
 	}
 	if options.ReadOnly {
 		if err := ensureDBReadable(dbPath); err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		if err := ensureDBDir(dbPath); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if vacuumInto != "" {
 		if err := ensureBackupTarget(vacuumInto); err != nil {
-			return err
+			return false, err
 		}
 	}
 
 	store, err := storage.Open(dbPath, options)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer func() {
 		_ = store.Close()
@@ -200,7 +204,7 @@ func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck
 	if integrityCheck {
 		results, err := store.IntegrityCheck()
 		if err != nil {
-			return err
+			return false, err
 		}
 		if len(results) == 0 {
 			log.Printf("level=info msg=\"sqlite integrity check returned no rows\"")
@@ -213,7 +217,7 @@ func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck
 	if vacuum || vacuumInto != "" {
 		target := vacuumInto
 		if err := store.Vacuum(target); err != nil {
-			return err
+			return false, err
 		}
 		if target == "" {
 			log.Printf("level=info msg=\"sqlite vacuum completed\"")
@@ -223,12 +227,11 @@ func runSQLiteMaintenance(dbPath string, options storage.Options, integrityCheck
 	}
 	if analyze {
 		if err := store.Analyze(); err != nil {
-			return err
+			return false, err
 		}
 		log.Printf("level=info msg=\"sqlite analyze completed\"")
 	}
-	os.Exit(0)
-	return nil
+	return true, nil
 }
 
 func ensureBackupTarget(path string) error {
