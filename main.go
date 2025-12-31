@@ -18,6 +18,12 @@ import (
 	"github.com/treefix50/primetime/internal/storage"
 )
 
+var (
+	version   string
+	commit    string
+	buildDate string
+)
+
 func main() {
 	var (
 		root           = flag.String("root", "./media", "media root directory")
@@ -82,7 +88,12 @@ func main() {
 		log.Fatalf("level=error msg=\"failed to open storage\" path=%s err=%v", *db, err)
 	}
 
-	s, err := server.New(*root, *addr, store, scanInterval, *cors)
+	versionInfo := server.VersionInfo{
+		Version:   version,
+		Commit:    commit,
+		BuildDate: buildDate,
+	}
+	s, err := server.New(*root, *addr, store, scanInterval, *cors, versionInfo)
 	if err != nil {
 		log.Fatalf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 	}
