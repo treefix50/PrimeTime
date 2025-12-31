@@ -44,13 +44,13 @@ type VersionInfo struct {
 	BuildDate string `json:"buildDate"`
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool, version VersionInfo, extensions []string) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, version VersionInfo, extensions []string) (*Server, error) {
 	lib, err := NewLibrary(root, store, extensions)
 	if err != nil {
 		return nil, err
 	}
 	readOnly := storeReadOnly(store)
-	if !readOnly {
+	if !readOnly && !noInitialScan {
 		// initial scan
 		if err := lib.Scan(); err != nil {
 			log.Printf("scan failed (initial): %v", err)

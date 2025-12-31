@@ -56,6 +56,7 @@ Pfadregeln für `-db`:
 Weitere Optionen:
 
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
+* `-no-initial-scan` (überspringt den initialen Scan beim Start)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
 * `-db-busy-timeout` (SQLite Busy-Timeout; Default: `5s`; `0` deaktiviert)
 * `-db-synchronous` (SQLite Synchronous-Modus; Default: `NORMAL`)

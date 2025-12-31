@@ -34,6 +34,7 @@ func main() {
 		dbSynchronous  = flag.String("db-synchronous", "NORMAL", "sqlite synchronous mode (OFF, NORMAL, FULL, EXTRA)")
 		dbCacheSize    = flag.Int("db-cache-size", -65536, "sqlite cache size (negative values are KiB)")
 		scan           = flag.String("scan-interval", "10m", "media scan interval (e.g. 10m, 0 to disable)")
+		noInitialScan  = flag.Bool("no-initial-scan", false, "skip the initial media scan on startup")
 		cors           = flag.Bool("cors", false, "enable CORS headers for API responses")
 		integrityCheck = flag.Bool("sqlite-integrity-check", false, "run PRAGMA integrity_check and exit")
 		vacuum         = flag.Bool("sqlite-vacuum", false, "run VACUUM and exit")
@@ -95,7 +96,7 @@ func main() {
 		Commit:    commit,
 		BuildDate: buildDate,
 	}
-	s, err := server.New(*root, *addr, store, scanInterval, *cors, versionInfo, extensionList)
+	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, versionInfo, extensionList)
 	if err != nil {
 		log.Fatalf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 	}
