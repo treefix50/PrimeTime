@@ -24,13 +24,25 @@ type MediaItem struct {
 }
 
 type Library struct {
-	root   string
-	rootID string
-	mu     sync.RWMutex
-	items  map[string]MediaItem
-	store  MediaStore
+	root              string
+	rootID            string
+	mu                sync.RWMutex
+	items             map[string]MediaItem
+	store             MediaStore
+	allowedExtensions map[string]bool
 	// lastScan tracks the time the library last completed a scan.
 	lastScan time.Time
+}
+
+var defaultExtensions = []string{
+	".avi",
+	".m2ts",
+	".m4v",
+	".mkv",
+	".mov",
+	".mp4",
+	".ts",
+	".webm",
 }
 
 func storeReadOnly(store MediaStore) bool {
@@ -40,7 +52,34 @@ func storeReadOnly(store MediaStore) bool {
 	return store.ReadOnly()
 }
 
-func NewLibrary(root string, store MediaStore) (*Library, error) {
+func buildAllowedExtensions(extensions []string) map[string]bool {
+	if len(extensions) == 0 {
+		extensions = defaultExtensions
+	}
+	allowed := make(map[string]bool, len(extensions))
+	for _, ext := range extensions {
+		normalized := normalizeExtension(ext)
+		if normalized == "" {
+			continue
+		}
+		allowed[normalized] = true
+	}
+	return allowed
+}
+
+func normalizeExtension(ext string) string {
+	ext = strings.TrimSpace(ext)
+	if ext == "" {
+		return ""
+	}
+	ext = strings.ToLower(ext)
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	return ext
+}
+
+func NewLibrary(root string, store MediaStore, extensions []string) (*Library, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
@@ -63,10 +102,11 @@ func NewLibrary(root string, store MediaStore) (*Library, error) {
 		}
 	}
 	return &Library{
-		root:   root,
-		rootID: rootID,
-		items:  items,
-		store:  store,
+		root:              root,
+		rootID:            rootID,
+		items:             items,
+		store:             store,
+		allowedExtensions: buildAllowedExtensions(extensions),
 	}, nil
 }
 
@@ -82,17 +122,6 @@ func (l *Library) Scan() error {
 			scanRunID = run.ID
 		}
 	}
-	allowedExtensions := map[string]bool{
-		".avi":  true,
-		".m2ts": true,
-		".m4v":  true,
-		".mkv":  true,
-		".mov":  true,
-		".mp4":  true,
-		".ts":   true,
-		".webm": true,
-	}
-
 	err := filepath.WalkDir(l.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			scanErrs = append(scanErrs, err)
@@ -103,7 +132,7 @@ func (l *Library) Scan() error {
 		}
 
 		ext := strings.ToLower(filepath.Ext(d.Name()))
-		if !allowedExtensions[ext] {
+		if !l.allowedExtensions[ext] {
 			// minimal: video types; mkv requested; others optional
 			return nil
 		}

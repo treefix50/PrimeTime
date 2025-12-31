@@ -40,8 +40,8 @@ type VersionInfo struct {
 	BuildDate string `json:"buildDate"`
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool, version VersionInfo) (*Server, error) {
-	lib, err := NewLibrary(root, store)
+func New(root, addr string, store MediaStore, scanInterval time.Duration, cors bool, version VersionInfo, extensions []string) (*Server, error) {
+	lib, err := NewLibrary(root, store, extensions)
 	if err != nil {
 		return nil, err
 	}
