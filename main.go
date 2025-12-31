@@ -105,10 +105,11 @@ func defaultDBPath() string {
 }
 
 func ensureDBDir(path string) error {
-	if path == ":memory:" {
+	dbPath := dbFilePath(path)
+	if path == ":memory:" || dbPath == ":memory:" {
 		return nil
 	}
-	if info, err := os.Stat(path); err == nil {
+	if info, err := os.Stat(dbPath); err == nil {
 		if info.IsDir() {
 			return fmt.Errorf("db path points to a directory")
 		}
@@ -117,11 +118,11 @@ func ensureDBDir(path string) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return err
 	}
 
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := os.OpenFile(dbPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		if os.IsExist(err) {
 			return nil
