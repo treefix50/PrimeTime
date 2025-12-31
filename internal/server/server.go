@@ -255,6 +255,30 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		action = parts[1]
 	}
 
+	if action == "exists" {
+		if r.Method != http.MethodGet {
+			s.methodNotAllowed(w)
+			return
+		}
+		var ok bool
+		if s.lib.store == nil {
+			_, ok = s.lib.Get(id)
+		} else {
+			var err error
+			_, ok, err = s.lib.store.GetByID(id)
+			if err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+		}
+		if ok {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
 	var item MediaItem
 	var ok bool
 	if s.lib.store == nil {
