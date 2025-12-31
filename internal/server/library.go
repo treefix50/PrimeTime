@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io/fs"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -161,7 +162,7 @@ func (l *Library) Scan() error {
 			}
 			nfo, err := ParseNFOFile(item.NFOPath)
 			if err != nil {
-				scanErrs = append(scanErrs, err)
+				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", item.NFOPath, err)
 				continue
 			}
 			if err := l.store.SaveNFO(item.ID, nfo); err != nil {
