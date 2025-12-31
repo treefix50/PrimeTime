@@ -36,6 +36,7 @@ func main() {
 		scan           = flag.String("scan-interval", "10m", "media scan interval (e.g. 10m, 0 to disable)")
 		noInitialScan  = flag.Bool("no-initial-scan", false, "skip the initial media scan on startup")
 		cors           = flag.Bool("cors", false, "enable CORS headers for API responses")
+		jsonErrors     = flag.Bool("json-errors", false, "render API errors as JSON responses")
 		integrityCheck = flag.Bool("sqlite-integrity-check", false, "run PRAGMA integrity_check and exit")
 		vacuum         = flag.Bool("sqlite-vacuum", false, "run VACUUM and exit")
 		vacuumInto     = flag.String("sqlite-vacuum-into", "", "run VACUUM INTO <path> and exit")
@@ -96,7 +97,7 @@ func main() {
 		Commit:    commit,
 		BuildDate: buildDate,
 	}
-	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, versionInfo, extensionList)
+	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, extensionList)
 	if err != nil {
 		log.Fatalf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 	}
