@@ -163,12 +163,12 @@ curl http://localhost:8080/items/{id}/nfo/raw
 # Erwartet: XML-Text der NFO, 404 falls keine NFO existiert
 
 curl "http://localhost:8080/items/{id}/playback?clientId=my-player"
-# Erwartet: Playback-Status (GET, clientId ist Pflicht)
+# Erwartet: Playback-Status inkl. lastPlayedAt (Unix) und optional percentComplete
 
 curl -X POST "http://localhost:8080/items/{id}/playback?clientId=my-player" \
   -H "Content-Type: application/json" \
-  -d '{ "position": 123.45, "state": "playing" }'
-# Erwartet: Playback-Update (POST, clientId ist Pflicht)
+  -d '{ "event": "progress", "positionSeconds": 123, "durationSeconds": 456, "lastPlayedAt": 1718611200, "percentComplete": 27.0 }'
+# Erwartet: Playback-Update (POST, clientId ist Pflicht, percentComplete optional)
 ```
 Playback-`progress`-Updates werden pro `(mediaID, clientId)` im Speicher gedrosselt (derzeit mindestens 5 Sekunden Abstand).
 Der Query-Parameter `q` filtert nach Treffern im Titel.

@@ -552,26 +552,34 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 	return &nfo, true, nil
 }
 
-func (s *Store) UpsertPlaybackState(mediaID string, positionSeconds, durationSeconds int64, clientID string) error {
+func (s *Store) UpsertPlaybackState(mediaID string, positionSeconds, durationSeconds int64, lastPlayedAt int64, percentComplete *float64, clientID string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
 	}
 
 	normalizedClientID := strings.TrimSpace(clientID)
+	percentValue := sql.NullFloat64{}
+	if percentComplete != nil {
+		percentValue = sql.NullFloat64{Float64: *percentComplete, Valid: true}
+	}
 	_, err := s.db.Exec(`
 		INSERT INTO playback_state (
-			media_id, position_seconds, duration_seconds, updated_at, client_id
+			media_id, position_seconds, duration_seconds, updated_at, last_played_at, percent_complete, client_id
 		)
-		VALUES (?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(media_id, client_id) DO UPDATE SET
 			position_seconds=excluded.position_seconds,
 			duration_seconds=excluded.duration_seconds,
-			updated_at=excluded.updated_at
+			updated_at=excluded.updated_at,
+			last_played_at=excluded.last_played_at,
+			percent_complete=excluded.percent_complete
 	`,
 		mediaID,
 		positionSeconds,
 		durationSeconds,
 		time.Now().Unix(),
+		lastPlayedAt,
+		percentValue,
 		normalizedClientID,
 	)
 	return err
@@ -584,7 +592,7 @@ func (s *Store) GetPlaybackState(mediaID, clientID string) (*server.PlaybackStat
 
 	normalizedClientID := strings.TrimSpace(clientID)
 	query := `
-		SELECT media_id, position_seconds, duration_seconds, updated_at, client_id
+		SELECT media_id, position_seconds, duration_seconds, updated_at, last_played_at, percent_complete, client_id
 		FROM playback_state
 		WHERE media_id = ?
 	`
@@ -597,11 +605,14 @@ func (s *Store) GetPlaybackState(mediaID, clientID string) (*server.PlaybackStat
 	}
 
 	var state server.PlaybackState
+	var percentComplete sql.NullFloat64
 	err := s.db.QueryRow(query, args...).Scan(
 		&state.MediaID,
 		&state.PositionSeconds,
 		&state.DurationSeconds,
 		&state.UpdatedAt,
+		&state.LastPlayedAt,
+		&percentComplete,
 		&state.ClientID,
 	)
 	if err != nil {
@@ -609,6 +620,11 @@ func (s *Store) GetPlaybackState(mediaID, clientID string) (*server.PlaybackStat
 			return nil, false, nil
 		}
 		return nil, false, err
+	}
+
+	if percentComplete.Valid {
+		value := percentComplete.Float64
+		state.PercentComplete = &value
 	}
 
 	return &state, true, nil

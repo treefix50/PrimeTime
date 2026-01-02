@@ -19,7 +19,7 @@ type MediaStore interface {
 	SaveNFO(mediaID string, nfo *NFO) error
 	DeleteNFO(mediaID string) error
 	GetNFO(mediaID string) (*NFO, bool, error)
-	UpsertPlaybackState(mediaID string, positionSeconds, durationSeconds int64, clientID string) error
+	UpsertPlaybackState(mediaID string, positionSeconds, durationSeconds int64, lastPlayedAt int64, percentComplete *float64, clientID string) error
 	GetPlaybackState(mediaID, clientID string) (*PlaybackState, bool, error)
 	DeletePlaybackState(mediaID, clientID string) error
 }
