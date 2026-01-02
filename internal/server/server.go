@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -437,6 +439,23 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 		s.writeError(w, errNotFound, http.StatusNotFound)
 
+	case "subtitles":
+		// /items/{id}/subtitles
+		if r.Method != http.MethodGet {
+			s.methodNotAllowed(w)
+			return
+		}
+		if len(parts) != 2 {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+		subtitlePath, contentType := subtitlePathForVideo(item.VideoPath)
+		if subtitlePath == "" {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+		ServeTextFile(w, r, subtitlePath, contentType)
+
 	case "playback":
 		if s.lib.store == nil {
 			s.writeError(w, errNotFound, http.StatusNotFound)
@@ -526,6 +545,27 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.writeError(w, errNotFound, http.StatusNotFound)
 	}
+}
+
+func subtitlePathForVideo(videoPath string) (string, string) {
+	base := strings.TrimSuffix(videoPath, filepath.Ext(videoPath))
+	if base == "" {
+		return "", ""
+	}
+	candidates := []struct {
+		ext         string
+		contentType string
+	}{
+		{ext: ".vtt", contentType: "text/vtt; charset=utf-8"},
+		{ext: ".srt", contentType: "application/x-subrip; charset=utf-8"},
+	}
+	for _, candidate := range candidates {
+		path := base + candidate.ext
+		if _, err := os.Stat(path); err == nil {
+			return path, candidate.contentType
+		}
+	}
+	return "", ""
 }
 
 func writeJSON(w http.ResponseWriter, r *http.Request, v any) {

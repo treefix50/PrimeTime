@@ -1,7 +1,7 @@
 # PrimeTime
 
 PrimeTime ist ein minimalistischer Media-Server in Go.
-Er stellt Video-Dateien (.mkv, .mp4) und optionale Metadaten (.nfo) über HTTP bereit.
+Er stellt Video-Dateien (.mkv, .mp4, .m2ts) und optionale Metadaten (.nfo) sowie Untertitel (.srt/.vtt) über HTTP bereit.
 Es gibt kein Web-Interface und keine Authentifizierung.
 
 ## Unterstützte NFO-Typen
@@ -177,6 +177,9 @@ curl http://localhost:8080/items/{id}/nfo
 
 curl http://localhost:8080/items/{id}/nfo/raw
 # Erwartet: XML-Text der NFO, 404 falls keine NFO existiert
+
+curl http://localhost:8080/items/{id}/subtitles
+# Erwartet: Text der Untertitel (.vtt bevorzugt, sonst .srt), 404 falls keine Untertitel existieren
 
 curl "http://localhost:8080/items/{id}/playback?clientId=my-player"
 # Erwartet: Playback-Status inkl. lastPlayedAt (Unix) und optional percentComplete
