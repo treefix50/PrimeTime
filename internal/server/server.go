@@ -368,12 +368,19 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			nfo, err := ParseNFOFile(item.NFOPath)
-			if err != nil {
-				s.writeError(w, errNotFound, http.StatusNotFound)
+			if item.NFOPath != "" {
+				nfo, err := ParseNFOFile(item.NFOPath)
+				if err == nil {
+					writeJSON(w, r, nfo)
+					return
+				}
+			}
+
+			if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
+				writeJSON(w, r, fallback)
 				return
 			}
-			writeJSON(w, r, nfo)
+			s.writeError(w, errNotFound, http.StatusNotFound)
 			return
 		}
 
