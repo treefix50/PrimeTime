@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS playback_state (
 	position_seconds INTEGER NOT NULL,
 	duration_seconds INTEGER NOT NULL,
 	updated_at INTEGER NOT NULL,
+	last_played_at INTEGER NOT NULL,
+	percent_complete REAL,
 	client_id TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (media_id, client_id),
 	FOREIGN KEY (media_id) REFERENCES media_items(id) ON DELETE CASCADE
@@ -104,6 +106,14 @@ var migrations = []migration{
 		statements: []string{
 			schemaNFOQueryIndexes,
 			schemaLibraryRootsIndexes,
+		},
+	},
+	{
+		version: 3,
+		statements: []string{
+			`ALTER TABLE playback_state ADD COLUMN last_played_at INTEGER NOT NULL DEFAULT 0;`,
+			`ALTER TABLE playback_state ADD COLUMN percent_complete REAL;`,
+			`UPDATE playback_state SET last_played_at = updated_at WHERE last_played_at = 0;`,
 		},
 	},
 }

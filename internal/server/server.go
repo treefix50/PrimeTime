@@ -430,6 +430,10 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 			clientID := strings.TrimSpace(payload.ClientID)
 			position := payload.PositionSeconds
 			duration := payload.DurationSeconds
+			lastPlayedAt := payload.LastPlayedAt
+			if lastPlayedAt <= 0 {
+				lastPlayedAt = time.Now().Unix()
+			}
 
 			shouldDelete := position <= 0 || duration <= 0 || (event == "stop" && position >= duration)
 			if shouldDelete {
@@ -461,7 +465,7 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 				s.playbackMu.Unlock()
 			}
 
-			if err := s.lib.store.UpsertPlaybackState(item.ID, position, duration, clientID); err != nil {
+			if err := s.lib.store.UpsertPlaybackState(item.ID, position, duration, lastPlayedAt, payload.PercentComplete, clientID); err != nil {
 				s.writeError(w, errInternal, http.StatusInternalServerError)
 				return
 			}
