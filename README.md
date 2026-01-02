@@ -164,7 +164,7 @@ curl "http://localhost:8080/library?limit=25&offset=50"
 # Erwartet: JSON-Array, Einträge 51-75 (pagination)
 
 curl.exe -X POST http://localhost:8080/library  # triggert einen Rescan (PowerShell: echtes curl)
-# Erwartet: Rescan wird angestoßen, Antwort: { "status": "ok" }
+# Erwartet: Rescan wird angestoßen, Antwort: { "status": "ok" } (Rate-Limit: HTTP 429)
 
 curl -X POST http://localhost:8080/library/scan \
   -H "Content-Type: application/json" \
@@ -192,9 +192,14 @@ curl "http://localhost:8080/items/{id}/playback?clientId=my-player"
 curl -X POST "http://localhost:8080/items/{id}/playback?clientId=my-player" \
   -H "Content-Type: application/json" \
   -d '{ "event": "progress", "positionSeconds": 123, "durationSeconds": 456, "lastPlayedAt": 1718611200, "percentComplete": 27.0 }'
-# Erwartet: Playback-Update (POST, clientId ist Pflicht, percentComplete optional)
+# Erwartet: Playback-Update (POST, clientId ist Pflicht, percentComplete optional, Rate-Limit: HTTP 429)
 ```
-Playback-`progress`-Updates werden pro `(mediaID, clientId)` im Speicher gedrosselt (derzeit mindestens 5 Sekunden Abstand).
+### Rate Limits
+
+* `POST /library` ist auf einen manuellen Rescan pro 30 Sekunden begrenzt. Zu frühe Aufrufe erhalten HTTP `429`.
+* `POST /items/{id}/playback` (Event `progress`) ist pro `(mediaID, clientId)` auf ein Update alle 5 Sekunden begrenzt. Zu frühe Updates erhalten HTTP `429`.
+
+Playback-`progress`-Updates werden pro `(mediaID, clientId)` im Speicher gedrosselt.
 Der Query-Parameter `q` filtert nach Treffern im Titel.
 Der Query-Parameter `sort` unterstützt `title`, `modified` und `size` (Default: `title`).
 Der Query-Parameter `limit` begrenzt die Anzahl der Einträge; `offset` überspringt die ersten N Einträge.

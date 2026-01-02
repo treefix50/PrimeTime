@@ -24,24 +24,22 @@ const (
 )
 
 type Server struct {
-	addr           string
-	lib            *Library
-	http           *http.Server
-	cors           bool
-	jsonErrors     bool
-	readOnly       bool
-	ffmpegReady    bool
-	startedAt      time.Time
-	version        VersionInfo
-	scanInterval   time.Duration
-	scanTicker     *time.Ticker
-	scanStop       chan struct{}
-	scanStopOnce   sync.Once
-	scanWg         sync.WaitGroup
-	manualScanMu   sync.Mutex
-	lastManualScan time.Time
-	playbackMu     sync.Mutex
-	playbackLast   map[string]time.Time
+	addr              string
+	lib               *Library
+	http              *http.Server
+	cors              bool
+	jsonErrors        bool
+	readOnly          bool
+	ffmpegReady       bool
+	startedAt         time.Time
+	version           VersionInfo
+	scanInterval      time.Duration
+	scanTicker        *time.Ticker
+	scanStop          chan struct{}
+	scanStopOnce      sync.Once
+	scanWg            sync.WaitGroup
+	manualScanLimiter *RateLimiter
+	playbackLimiter   *RateLimiter
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter) {
@@ -71,16 +69,17 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	mux := http.NewServeMux()
 
 	s := &Server{
-		addr:         addr,
-		lib:          lib,
-		cors:         cors,
-		jsonErrors:   jsonErrors,
-		readOnly:     readOnly,
-		ffmpegReady:  ffmpegReady,
-		startedAt:    time.Now(),
-		version:      version,
-		scanInterval: scanInterval,
-		playbackLast: make(map[string]time.Time),
+		addr:              addr,
+		lib:               lib,
+		cors:              cors,
+		jsonErrors:        jsonErrors,
+		readOnly:          readOnly,
+		ffmpegReady:       ffmpegReady,
+		startedAt:         time.Now(),
+		version:           version,
+		scanInterval:      scanInterval,
+		manualScanLimiter: NewRateLimiter(manualScanRateLimit),
+		playbackLimiter:   NewRateLimiter(playbackProgressMin),
 	}
 
 	if s.scanInterval > 0 && !s.readOnly {
@@ -287,20 +286,7 @@ func (s *Server) handleLibraryScan(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) allowManualScan() (bool, time.Duration) {
-	s.manualScanMu.Lock()
-	defer s.manualScanMu.Unlock()
-
-	now := time.Now()
-	if s.lastManualScan.IsZero() {
-		s.lastManualScan = now
-		return true, 0
-	}
-	elapsed := now.Sub(s.lastManualScan)
-	if elapsed < manualScanRateLimit {
-		return false, manualScanRateLimit - elapsed
-	}
-	s.lastManualScan = now
-	return true, 0
+	return s.manualScanLimiter.Allow("manual-scan")
 }
 
 func manualScanError(wait time.Duration) string {
@@ -309,6 +295,14 @@ func manualScanError(wait time.Duration) string {
 		waitSeconds = 1
 	}
 	return fmt.Sprintf("rescan zu früh, bitte in %ds erneut versuchen", waitSeconds)
+}
+
+func playbackRateLimitError(wait time.Duration) string {
+	waitSeconds := int(wait.Seconds())
+	if waitSeconds < 1 {
+		waitSeconds = 1
+	}
+	return fmt.Sprintf("playback update zu früh, bitte in %ds erneut versuchen", waitSeconds)
 }
 
 // Routes under /items/{id}[/{action}...]
@@ -521,16 +515,10 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 			if event == "progress" {
 				key := item.ID + "|" + clientID
-				now := time.Now()
-				s.playbackMu.Lock()
-				last, ok := s.playbackLast[key]
-				if ok && now.Sub(last) < playbackProgressMin {
-					s.playbackMu.Unlock()
-					writeJSON(w, r, map[string]string{"status": "ok"})
+				if ok, wait := s.playbackLimiter.Allow(key); !ok {
+					s.writeError(w, playbackRateLimitError(wait), http.StatusTooManyRequests)
 					return
 				}
-				s.playbackLast[key] = now
-				s.playbackMu.Unlock()
 			}
 
 			if err := s.lib.store.UpsertPlaybackState(item.ID, position, duration, lastPlayedAt, payload.PercentComplete, clientID); err != nil {
