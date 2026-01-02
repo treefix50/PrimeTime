@@ -30,6 +30,8 @@ func ServeVideoFile(w http.ResponseWriter, r *http.Request, path string) {
 		w.Header().Set("Content-Type", "video/x-msvideo")
 	case ".mkv":
 		w.Header().Set("Content-Type", "video/x-matroska")
+	case ".m2ts", ".mts":
+		w.Header().Set("Content-Type", "video/mp2t")
 	case ".mov":
 		w.Header().Set("Content-Type", "video/quicktime")
 	case ".mp4", ".m4v":
