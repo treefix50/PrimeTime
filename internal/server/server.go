@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -91,6 +92,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	mux.HandleFunc("/stats", s.handleStats)
 	mux.HandleFunc("/version", s.handleVersion)
 	mux.HandleFunc("/library", s.handleLibrary)
+	mux.HandleFunc("/library/scan", s.handleLibraryScan)
 	mux.HandleFunc("/items/", s.handleItems)
 
 	s.http = &http.Server{
@@ -240,6 +242,46 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.methodNotAllowed(w)
 	}
+}
+
+func (s *Server) handleLibraryScan(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "POST, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodPost {
+		s.methodNotAllowed(w)
+		return
+	}
+	if s.readOnly {
+		s.writeError(w, "read-only mode", http.StatusForbidden)
+		return
+	}
+	if ok, wait := s.allowManualScan(); !ok {
+		s.writeError(w, manualScanError(wait), http.StatusTooManyRequests)
+		return
+	}
+
+	var payload struct {
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		s.writeError(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(payload.Path) == "" {
+		s.writeError(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.lib.ScanPath(payload.Path); err != nil {
+		if errors.Is(err, ErrInvalidScanPath) || errors.Is(err, ErrScanPathNotFound) {
+			s.writeError(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		s.writeError(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, map[string]string{"status": "ok"})
 }
 
 func (s *Server) allowManualScan() (bool, time.Duration) {

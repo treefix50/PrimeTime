@@ -161,6 +161,11 @@ curl "http://localhost:8080/library?limit=25&offset=50"
 curl.exe -X POST http://localhost:8080/library  # triggert einen Rescan (PowerShell: echtes curl)
 # Erwartet: Rescan wird angestoßen, Antwort: { "status": "ok" }
 
+curl -X POST http://localhost:8080/library/scan \
+  -H "Content-Type: application/json" \
+  -d '{ "path": "Serien/Star Trek" }'
+# Erwartet: Partial-Scan des Teilbaums (Pfad relativ zu -root oder absolut), Antwort: { "status": "ok" }
+
 curl -I http://localhost:8080/items/{id}/stream
 # Erwartet: 200/206 (Range möglich), Stream-Endpoint
 
