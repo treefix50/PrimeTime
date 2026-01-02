@@ -17,6 +17,7 @@ const (
 	errNotFound         = "not found"
 	errMethodNotAllowed = "method not allowed"
 	manualScanRateLimit = 30 * time.Second
+	playbackProgressMin = 5 * time.Second
 )
 
 type Server struct {
@@ -36,6 +37,8 @@ type Server struct {
 	scanWg         sync.WaitGroup
 	manualScanMu   sync.Mutex
 	lastManualScan time.Time
+	playbackMu     sync.Mutex
+	playbackLast   map[string]time.Time
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter) {
@@ -74,6 +77,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		startedAt:    time.Now(),
 		version:      version,
 		scanInterval: scanInterval,
+		playbackLast: make(map[string]time.Time),
 	}
 
 	if s.scanInterval > 0 && !s.readOnly {
@@ -433,8 +437,28 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 					s.writeError(w, errInternal, http.StatusInternalServerError)
 					return
 				}
+				if clientID != "" {
+					key := item.ID + "|" + clientID
+					s.playbackMu.Lock()
+					delete(s.playbackLast, key)
+					s.playbackMu.Unlock()
+				}
 				writeJSON(w, r, map[string]string{"status": "ok"})
 				return
+			}
+
+			if event == "progress" {
+				key := item.ID + "|" + clientID
+				now := time.Now()
+				s.playbackMu.Lock()
+				last, ok := s.playbackLast[key]
+				if ok && now.Sub(last) < playbackProgressMin {
+					s.playbackMu.Unlock()
+					writeJSON(w, r, map[string]string{"status": "ok"})
+					return
+				}
+				s.playbackLast[key] = now
+				s.playbackMu.Unlock()
 			}
 
 			if err := s.lib.store.UpsertPlaybackState(item.ID, position, duration, clientID); err != nil {
