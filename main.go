@@ -110,7 +110,7 @@ func run() error {
 		Commit:    commit,
 		BuildDate: buildDate,
 	}
-	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, extensionList)
+	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, true, extensionList)
 	if err != nil {
 		log.Printf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 		return err

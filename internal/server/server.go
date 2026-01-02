@@ -26,6 +26,8 @@ type Server struct {
 	cors           bool
 	jsonErrors     bool
 	readOnly       bool
+	ffmpegReady    bool
+	startedAt      time.Time
 	version        VersionInfo
 	scanInterval   time.Duration
 	scanTicker     *time.Ticker
@@ -46,7 +48,7 @@ type VersionInfo struct {
 	BuildDate string `json:"buildDate"`
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, extensions []string) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, ffmpegReady bool, extensions []string) (*Server, error) {
 	lib, err := NewLibrary(root, store, extensions)
 	if err != nil {
 		return nil, err
@@ -68,6 +70,8 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		cors:         cors,
 		jsonErrors:   jsonErrors,
 		readOnly:     readOnly,
+		ffmpegReady:  ffmpegReady,
+		startedAt:    time.Now(),
 		version:      version,
 		scanInterval: scanInterval,
 	}
@@ -129,6 +133,26 @@ func (s *Server) stopScanTicker() {
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
+		return
+	}
+	if strings.TrimSpace(r.URL.Query().Get("json")) != "" {
+		writeJSON(w, r, map[string]any{
+			"db": map[string]any{
+				"connected": s.lib.store != nil,
+				"readOnly":  s.readOnly,
+			},
+			"ffmpeg": map[string]any{
+				"ready": s.ffmpegReady,
+			},
+			"uptime": int64(time.Since(s.startedAt).Seconds()),
+		})
+		return
+	}
 	w.Header().Set("Content-Type", textContentType)
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
