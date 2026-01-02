@@ -30,6 +30,7 @@ type Server struct {
 	cors              bool
 	jsonErrors        bool
 	readOnly          bool
+	allowReadOnlyScan bool
 	ffmpegReady       bool
 	startedAt         time.Time
 	version           VersionInfo
@@ -52,13 +53,14 @@ type VersionInfo struct {
 	BuildDate string `json:"buildDate"`
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, ffmpegReady bool, extensions []string) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, ffmpegReady bool, allowReadOnlyScan bool, extensions []string) (*Server, error) {
 	lib, err := NewLibrary(root, store, extensions)
 	if err != nil {
 		return nil, err
 	}
 	readOnly := storeReadOnly(store)
-	if !readOnly && !noInitialScan {
+	allowScan := !readOnly || allowReadOnlyScan
+	if allowScan && !noInitialScan {
 		// initial scan
 		if err := lib.Scan(); err != nil {
 			log.Printf("scan failed (initial): %v", err)
@@ -74,6 +76,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		cors:              cors,
 		jsonErrors:        jsonErrors,
 		readOnly:          readOnly,
+		allowReadOnlyScan: allowReadOnlyScan,
 		ffmpegReady:       ffmpegReady,
 		startedAt:         time.Now(),
 		version:           version,
@@ -82,7 +85,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		playbackLimiter:   NewRateLimiter(playbackProgressMin),
 	}
 
-	if s.scanInterval > 0 && !s.readOnly {
+	if s.scanInterval > 0 && (!s.readOnly || s.allowReadOnlyScan) {
 		s.scanTicker = time.NewTicker(s.scanInterval)
 		s.scanStop = make(chan struct{})
 		s.scanWg.Add(1)
@@ -227,7 +230,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, r, items)
 	case http.MethodPost:
-		if s.readOnly {
+		if s.readOnly && !s.allowReadOnlyScan {
 			s.writeError(w, "read-only mode", http.StatusForbidden)
 			return
 		}
@@ -253,7 +256,7 @@ func (s *Server) handleLibraryScan(w http.ResponseWriter, r *http.Request) {
 		s.methodNotAllowed(w)
 		return
 	}
-	if s.readOnly {
+	if s.readOnly && !s.allowReadOnlyScan {
 		s.writeError(w, "read-only mode", http.StatusForbidden)
 		return
 	}

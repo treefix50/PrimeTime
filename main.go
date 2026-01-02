@@ -36,6 +36,7 @@ func run() error {
 		addr           = flag.String("addr", ":8080", "listen address")
 		db             = flag.String("db", defaultDBPath(), "sqlite database path")
 		dbReadOnly     = flag.Bool("db-read-only", false, "open sqlite database in read-only mode")
+		readOnlyScan   = flag.Bool("read-only-scan", false, "allow scans while the database is read-only (in-memory cache only)")
 		dbBusyTimeout  = flag.Duration("db-busy-timeout", 5*time.Second, "sqlite busy timeout (e.g. 5s, 0 to disable)")
 		dbSynchronous  = flag.String("db-synchronous", "NORMAL", "sqlite synchronous mode (OFF, NORMAL, FULL, EXTRA)")
 		dbCacheSize    = flag.Int("db-cache-size", -65536, "sqlite cache size (negative values are KiB)")
@@ -110,7 +111,7 @@ func run() error {
 		Commit:    commit,
 		BuildDate: buildDate,
 	}
-	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, true, extensionList)
+	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, true, *readOnlyScan, extensionList)
 	if err != nil {
 		log.Printf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 		return err
