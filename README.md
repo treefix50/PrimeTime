@@ -102,6 +102,12 @@ Anschließend wird `go run .` gestartet. ffmpeg wird **nicht** automatisch herun
 curl http://localhost:8080/health
 # Erwartet: "ok"
 
+curl http://localhost:8080/version
+# Erwartet: Versionsinfos (JSON)
+
+curl http://localhost:8080/stats
+# Erwartet: Statistikdaten (JSON)
+
 curl http://localhost:8080/library
 # Erwartet: JSON-Array mit Library-Einträgen
 
@@ -117,11 +123,22 @@ curl.exe -X POST http://localhost:8080/library  # triggert einen Rescan (PowerSh
 curl -I http://localhost:8080/items/{id}/stream
 # Erwartet: 200/206 (Range möglich), Stream-Endpoint
 
+curl http://localhost:8080/items/{id}/exists
+# Erwartet: { "exists": true/false }
+
 curl http://localhost:8080/items/{id}/nfo
 # Erwartet: JSON-Metadaten, 404 falls keine NFO existiert
 
 curl http://localhost:8080/items/{id}/nfo/raw
 # Erwartet: XML-Text der NFO, 404 falls keine NFO existiert
+
+curl "http://localhost:8080/items/{id}/playback?clientId=my-player"
+# Erwartet: Playback-Status (GET, clientId ist Pflicht)
+
+curl -X POST "http://localhost:8080/items/{id}/playback?clientId=my-player" \
+  -H "Content-Type: application/json" \
+  -d '{ "position": 123.45, "state": "playing" }'
+# Erwartet: Playback-Update (POST, clientId ist Pflicht)
 ```
 Der Query-Parameter `q` filtert nach Treffern im Titel.
 
