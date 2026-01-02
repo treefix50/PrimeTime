@@ -4,6 +4,18 @@ PrimeTime ist ein minimalistischer Media-Server in Go.
 Er stellt Video-Dateien (.mkv, .mp4) und optionale Metadaten (.nfo) über HTTP bereit.
 Es gibt kein Web-Interface und keine Authentifizierung.
 
+## Unterstützte NFO-Typen
+
+PrimeTime liest Kodi-kompatible XML-`*.nfo` Dateien und mappt die wichtigsten Felder:
+
+* `movie`: `title`, `originaltitle`, `plot`, `year`, `rating`, `genre`
+* `tvshow`: `title`, `plot`, `genre`
+* `episodedetails`: `title`, `plot`, `season`, `episode`, `showtitle`, `rating`
+* `musicvideo`: `title`, `album` → `originalTitle`, `artist` → `showTitle`, `plot`, `year`, `rating`, `genre`
+* `person`: `name` → `title`, `sortname` → `originalTitle`, `biography` → `plot`, `year`/`born` → `year`
+
+Nicht erkannte Root-Elemente werden als `unknown` gekennzeichnet.
+
 ## Voraussetzungen
 
 * **Go 1.22** muss installiert sein (entspricht `go.mod`).
