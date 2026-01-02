@@ -126,6 +126,12 @@ curl "http://localhost:8080/library?sort=modified"
 curl "http://localhost:8080/library?sort=size"
 # Erwartet: JSON-Array, sortiert nach Größe (größte zuerst)
 
+curl "http://localhost:8080/library?limit=25"
+# Erwartet: JSON-Array, maximal 25 Einträge
+
+curl "http://localhost:8080/library?limit=25&offset=50"
+# Erwartet: JSON-Array, Einträge 51-75 (pagination)
+
 curl.exe -X POST http://localhost:8080/library  # triggert einen Rescan (PowerShell: echtes curl)
 # Erwartet: Rescan wird angestoßen, Antwort: { "status": "ok" }
 
@@ -151,6 +157,7 @@ curl -X POST "http://localhost:8080/items/{id}/playback?clientId=my-player" \
 ```
 Der Query-Parameter `q` filtert nach Treffern im Titel.
 Der Query-Parameter `sort` unterstützt `title`, `modified` und `size` (Default: `title`).
+Der Query-Parameter `limit` begrenzt die Anzahl der Einträge; `offset` überspringt die ersten N Einträge.
 
 ## Checks (ffmpeg & SQLite)
 

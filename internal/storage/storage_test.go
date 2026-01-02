@@ -206,6 +206,65 @@ func TestGetAll(t *testing.T) {
 	}
 }
 
+func TestGetAllLimited(t *testing.T) {
+	store := newTestStore(t, true)
+
+	items := []server.MediaItem{
+		{
+			ID:        "beta",
+			Title:     "Beta",
+			VideoPath: "/tmp/beta.mkv",
+			NFOPath:   "",
+			Size:      10,
+			Modified:  time.Unix(1700000100, 0),
+		},
+		{
+			ID:        "alpha",
+			Title:     "Alpha",
+			VideoPath: "/tmp/alpha.mkv",
+			NFOPath:   "",
+			Size:      30,
+			Modified:  time.Unix(1700000200, 0),
+		},
+		{
+			ID:        "gamma",
+			Title:     "Gamma",
+			VideoPath: "/tmp/gamma.mkv",
+			NFOPath:   "",
+			Size:      20,
+			Modified:  time.Unix(1700000300, 0),
+		},
+	}
+
+	if err := store.SaveItems(items); err != nil {
+		t.Fatalf("SaveItems() error = %v", err)
+	}
+
+	got, err := store.GetAllLimited(1, 1, "title", "")
+	if err != nil {
+		t.Fatalf("GetAllLimited() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Title != "Beta" {
+		t.Fatalf("GetAllLimited() title order = %#v; want Beta", got)
+	}
+
+	got, err = store.GetAllLimited(2, 0, "size", "")
+	if err != nil {
+		t.Fatalf("GetAllLimited() size error = %v", err)
+	}
+	if len(got) != 2 || got[0].Title != "Alpha" || got[1].Title != "Gamma" {
+		t.Fatalf("GetAllLimited() size order = %q, %q; want Alpha, Gamma", got[0].Title, got[1].Title)
+	}
+
+	got, err = store.GetAllLimited(10, 0, "title", "ga")
+	if err != nil {
+		t.Fatalf("GetAllLimited() query error = %v", err)
+	}
+	if len(got) != 1 || got[0].Title != "Gamma" {
+		t.Fatalf("GetAllLimited() query filter = %#v; want Gamma", got)
+	}
+}
+
 func TestDeleteItems(t *testing.T) {
 	store := newTestStore(t, true)
 
