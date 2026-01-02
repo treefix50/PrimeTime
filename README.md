@@ -102,6 +102,9 @@ Anschließend wird `go run .` gestartet. ffmpeg wird **nicht** automatisch herun
 curl http://localhost:8080/health
 # Erwartet: "ok"
 
+curl "http://localhost:8080/health?json=1"
+# Erwartet: {"db":{"connected":true,"readOnly":false},"ffmpeg":{"ready":true},"uptime":123} (uptime in Sekunden)
+
 curl http://localhost:8080/version
 # Erwartet: Versionsinfos (JSON)
 
@@ -217,6 +220,9 @@ Hinweis: `/health` funktioniert auch ohne Medien. Optionaler Einzeiler:
 ```bash
 curl http://localhost:8080/health
 # Erwartet: "ok"
+
+curl "http://localhost:8080/health?json=1"
+# Erwartet: {"db":{"connected":true,"readOnly":false},"ffmpeg":{"ready":true},"uptime":123} (uptime in Sekunden)
 ```
 
 ## Troubleshooting (kurz)
