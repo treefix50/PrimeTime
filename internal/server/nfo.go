@@ -8,7 +8,7 @@ import (
 
 // NFO represents a minimal, parsed view of common Kodi-style .nfo files.
 type NFO struct {
-	Type        string   `json:"type"` // movie | tvshow | episode | unknown
+	Type        string   `json:"type"` // movie | tvshow | episode | musicvideo | person | unknown
 	Title       string   `json:"title,omitempty"`
 	Original    string   `json:"originalTitle,omitempty"`
 	Plot        string   `json:"plot,omitempty"`
@@ -109,6 +109,57 @@ func ParseNFOFile(path string) (*NFO, error) {
 			RawRootName: root,
 		}, nil
 
+	case "musicvideo":
+		var mv struct {
+			XMLName xml.Name `xml:"musicvideo"`
+			Title   string   `xml:"title"`
+			Album   string   `xml:"album"`
+			Artist  []string `xml:"artist"`
+			Plot    string   `xml:"plot"`
+			Year    string   `xml:"year"`
+			Rating  string   `xml:"rating"`
+			Genres  []string `xml:"genre"`
+		}
+
+		if err := xml.Unmarshal(data, &mv); err != nil {
+			return nil, err
+		}
+
+		return &NFO{
+			Type:        "musicvideo",
+			Title:       strings.TrimSpace(mv.Title),
+			Original:    strings.TrimSpace(mv.Album),
+			ShowTitle:   strings.TrimSpace(strings.Join(trimAll(mv.Artist), ", ")),
+			Plot:        strings.TrimSpace(mv.Plot),
+			Year:        strings.TrimSpace(mv.Year),
+			Rating:      strings.TrimSpace(mv.Rating),
+			Genres:      trimAll(mv.Genres),
+			RawRootName: root,
+		}, nil
+
+	case "person":
+		var p struct {
+			XMLName   xml.Name `xml:"person"`
+			Name      string   `xml:"name"`
+			SortName  string   `xml:"sortname"`
+			Biography string   `xml:"biography"`
+			Born      string   `xml:"born"`
+			Year      string   `xml:"year"`
+		}
+
+		if err := xml.Unmarshal(data, &p); err != nil {
+			return nil, err
+		}
+
+		return &NFO{
+			Type:        "person",
+			Title:       strings.TrimSpace(p.Name),
+			Original:    strings.TrimSpace(p.SortName),
+			Plot:        strings.TrimSpace(p.Biography),
+			Year:        extractYear(p.Year, p.Born),
+			RawRootName: root,
+		}, nil
+
 	default:
 		// Unknown or unsupported root element
 		return &NFO{
@@ -167,4 +218,30 @@ func trimAll(in []string) []string {
 		}
 	}
 	return out
+}
+
+func extractYear(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		for i := 0; i <= len(value)-4; i++ {
+			if value[i] < '0' || value[i] > '9' {
+				continue
+			}
+			year := value[i : i+4]
+			if year[1] < '0' || year[1] > '9' {
+				continue
+			}
+			if year[2] < '0' || year[2] > '9' {
+				continue
+			}
+			if year[3] < '0' || year[3] > '9' {
+				continue
+			}
+			return year
+		}
+	}
+	return ""
 }
