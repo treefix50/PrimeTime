@@ -16,6 +16,7 @@ type MediaStore interface {
 	GetAll() ([]MediaItem, error)
 	GetAllLimited(limit, offset int, sortBy, query string) ([]MediaItem, error)
 	GetByID(id string) (MediaItem, bool, error)
+	GetIDByPath(path string) (string, bool, error)
 	SaveNFO(mediaID string, nfo *NFO) error
 	DeleteNFO(mediaID string) error
 	GetNFO(mediaID string) (*NFO, bool, error)

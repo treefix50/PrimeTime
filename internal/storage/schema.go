@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS media_items (
 const schemaMediaItemsIndexes = `
 CREATE INDEX IF NOT EXISTS idx_media_items_title ON media_items(title);
 CREATE INDEX IF NOT EXISTS idx_media_items_path ON media_items(path);
-CREATE INDEX IF NOT EXISTS idx_media_items_modified ON media_items(modified);`
+CREATE INDEX IF NOT EXISTS idx_media_items_modified ON media_items(modified);
+`
 
 const schemaNFO = `
 CREATE TABLE IF NOT EXISTS nfo (
@@ -114,6 +115,14 @@ var migrations = []migration{
 			`ALTER TABLE playback_state ADD COLUMN last_played_at INTEGER NOT NULL DEFAULT 0;`,
 			`ALTER TABLE playback_state ADD COLUMN percent_complete REAL;`,
 			`UPDATE playback_state SET last_played_at = updated_at WHERE last_played_at = 0;`,
+		},
+	},
+	{
+		version: 4,
+		statements: []string{
+			`ALTER TABLE media_items ADD COLUMN stable_key TEXT;`,
+			`UPDATE media_items SET stable_key = id WHERE stable_key IS NULL;`,
+			`CREATE INDEX IF NOT EXISTS idx_media_items_stable_key ON media_items(stable_key);`,
 		},
 	},
 }

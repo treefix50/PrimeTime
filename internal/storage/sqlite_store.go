@@ -178,14 +178,15 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 		}
 
 		stmt, err := tx.Prepare(`
-		INSERT INTO media_items (id, path, title, size, modified, nfo_path)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO media_items (id, path, title, size, modified, nfo_path, stable_key)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			path=excluded.path,
 			title=excluded.title,
 			size=excluded.size,
 			modified=excluded.modified,
-			nfo_path=excluded.nfo_path
+			nfo_path=excluded.nfo_path,
+			stable_key=excluded.stable_key
 	`)
 		if err != nil {
 			rollback()
@@ -200,6 +201,7 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 				item.Size,
 				item.Modified.Unix(),
 				nullString(item.NFOPath),
+				nullString(item.StableKey),
 			)
 			if err != nil {
 				stmt.Close()
@@ -277,7 +279,7 @@ func (s *Store) GetAll() ([]server.MediaItem, error) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, path, title, size, modified, nfo_path
+		SELECT id, path, title, size, modified, nfo_path, stable_key
 		FROM media_items
 		ORDER BY title
 	`)
@@ -295,8 +297,9 @@ func (s *Store) GetAll() ([]server.MediaItem, error) {
 			size     int64
 			modified int64
 			nfoPath  sql.NullString
+			stable   sql.NullString
 		)
-		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath); err != nil {
+		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath, &stable); err != nil {
 			return nil, err
 		}
 		items = append(items, server.MediaItem{
@@ -306,6 +309,7 @@ func (s *Store) GetAll() ([]server.MediaItem, error) {
 			Size:      size,
 			Modified:  time.Unix(modified, 0),
 			NFOPath:   nfoPath.String,
+			StableKey: stable.String,
 		})
 	}
 
@@ -347,7 +351,7 @@ func (s *Store) GetAllLimited(limit, offset int, sortBy, query string) ([]server
 	args = append(args, limitValue, offset)
 
 	querySQL := fmt.Sprintf(`
-		SELECT id, path, title, size, modified, nfo_path
+		SELECT id, path, title, size, modified, nfo_path, stable_key
 		FROM media_items
 		%s
 		ORDER BY %s
@@ -369,8 +373,9 @@ func (s *Store) GetAllLimited(limit, offset int, sortBy, query string) ([]server
 			size     int64
 			modified int64
 			nfoPath  sql.NullString
+			stable   sql.NullString
 		)
-		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath); err != nil {
+		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath, &stable); err != nil {
 			return nil, err
 		}
 		items = append(items, server.MediaItem{
@@ -380,6 +385,7 @@ func (s *Store) GetAllLimited(limit, offset int, sortBy, query string) ([]server
 			Size:      size,
 			Modified:  time.Unix(modified, 0),
 			NFOPath:   nfoPath.String,
+			StableKey: stable.String,
 		})
 	}
 
@@ -403,10 +409,10 @@ func (s *Store) GetByID(id string) (server.MediaItem, bool, error) {
 	)
 
 	err := s.db.QueryRow(`
-		SELECT id, path, title, size, modified, nfo_path
+		SELECT id, path, title, size, modified, nfo_path, stable_key
 		FROM media_items
 		WHERE id = ?
-	`, id).Scan(&item.ID, &item.VideoPath, &title, &item.Size, &modified, &nfoPath)
+	`, id).Scan(&item.ID, &item.VideoPath, &title, &item.Size, &modified, &nfoPath, &item.StableKey)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return server.MediaItem{}, false, nil
@@ -419,6 +425,26 @@ func (s *Store) GetByID(id string) (server.MediaItem, bool, error) {
 	item.NFOPath = nfoPath.String
 
 	return item, true, nil
+}
+
+func (s *Store) GetIDByPath(path string) (string, bool, error) {
+	if s == nil || s.db == nil {
+		return "", false, fmt.Errorf("storage: missing database connection")
+	}
+
+	var id string
+	err := s.db.QueryRow(`
+		SELECT id
+		FROM media_items
+		WHERE path = ?
+	`, path).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return id, true, nil
 }
 
 func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
