@@ -16,6 +16,17 @@ PrimeTime liest Kodi-kompatible XML-`*.nfo` Dateien und mappt die wichtigsten Fe
 
 Nicht erkannte Root-Elemente werden als `unknown` gekennzeichnet.
 
+## Episoden-Metadaten aus Dateinamen (Fallback)
+
+Wenn keine `.nfo` vorhanden ist, versucht PrimeTime Episoden-Metadaten aus dem Dateinamen abzuleiten.
+Unterstützte Muster (Groß-/Kleinschreibung egal, Trenner wie `.`/`-`/`_`/Leerzeichen erlaubt):
+
+* `S01E02` (z. B. `Meine Serie S01E02`)
+* `S01 E02` / `S01.E02`
+* `1x02` (z. B. `Meine Serie 1x02`)
+
+Gefundene Werte werden als `title`, `season`, `episode` im JSON von `/items/{id}/nfo` ausgegeben.
+
 ## Voraussetzungen
 
 * **Go 1.22** muss installiert sein (entspricht `go.mod`).

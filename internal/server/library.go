@@ -10,7 +10,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -146,7 +148,11 @@ func (l *Library) Scan() error {
 			return nil
 		}
 
-		title := strings.TrimSuffix(d.Name(), filepath.Ext(d.Name()))
+		rawTitle := strings.TrimSuffix(d.Name(), filepath.Ext(d.Name()))
+		title := rawTitle
+		if parsedTitle, _, _, ok := parseEpisodeInfo(rawTitle); ok {
+			title = parsedTitle
+		}
 		nfo := guessNFOPath(path)
 
 		stableKey := stableID(path, info)
@@ -198,6 +204,12 @@ func (l *Library) Scan() error {
 		}
 		for _, item := range found {
 			if item.NFOPath == "" {
+				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
+					if err := l.store.SaveNFO(item.ID, fallback); err != nil {
+						scanErrs = append(scanErrs, err)
+					}
+					continue
+				}
 				if err := l.store.DeleteNFO(item.ID); err != nil {
 					scanErrs = append(scanErrs, err)
 				}
@@ -398,6 +410,74 @@ func guessNFOPath(videoPath string) string {
 		return nfo
 	}
 	return ""
+}
+
+var episodePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)^(.+?)[ ._-]*s(\d{1,2})[ ._-]*e(\d{1,2})`),
+	regexp.MustCompile(`(?i)^(.+?)[ ._-]*(\d{1,2})x(\d{1,2})`),
+}
+
+func parseEpisodeInfo(name string) (string, string, string, bool) {
+	cleanName := strings.TrimSpace(name)
+	if cleanName == "" {
+		return "", "", "", false
+	}
+	for _, pattern := range episodePatterns {
+		matches := pattern.FindStringSubmatch(cleanName)
+		if len(matches) != 4 {
+			continue
+		}
+		title := normalizeEpisodeTitle(matches[1])
+		if title == "" {
+			return "", "", "", false
+		}
+		season, ok := normalizeEpisodeNumber(matches[2])
+		if !ok {
+			return "", "", "", false
+		}
+		episode, ok := normalizeEpisodeNumber(matches[3])
+		if !ok {
+			return "", "", "", false
+		}
+		return title, season, episode, true
+	}
+	return "", "", "", false
+}
+
+func normalizeEpisodeTitle(raw string) string {
+	title := strings.NewReplacer(".", " ", "_", " ", "-", " ").Replace(raw)
+	parts := strings.Fields(title)
+	return strings.Join(parts, " ")
+}
+
+func normalizeEpisodeNumber(value string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	number, err := strconv.Atoi(value)
+	if err != nil {
+		return "", false
+	}
+	if number < 0 {
+		return "", false
+	}
+	return strconv.Itoa(number), true
+}
+
+func fallbackNFOFromFilename(videoPath string) (*NFO, bool) {
+	base := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
+	title, season, episode, ok := parseEpisodeInfo(base)
+	if !ok {
+		return nil, false
+	}
+	return &NFO{
+		Type:        "episode",
+		Title:       title,
+		Season:      season,
+		Episode:     episode,
+		RawRootName: "filename",
+	}, true
 }
 
 func stableID(path string, info fs.FileInfo) string {
