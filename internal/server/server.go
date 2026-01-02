@@ -171,11 +171,13 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		sortBy := normalizeSortBy(r.URL.Query().Get("sort"))
 		if s.lib.store == nil {
 			items := s.lib.All()
 			if query != "" {
 				items = filterItems(items, query)
 			}
+			sortItems(items, sortBy)
 			writeJSON(w, r, items)
 			return
 		}
@@ -188,6 +190,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 		if query != "" {
 			items = filterItems(items, query)
 		}
+		sortItems(items, sortBy)
 		writeJSON(w, r, items)
 	case http.MethodPost:
 		if s.readOnly {

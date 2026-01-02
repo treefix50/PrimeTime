@@ -240,7 +240,7 @@ func (l *Library) All() []MediaItem {
 	for _, it := range l.items {
 		out = append(out, it)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	sortItems(out, "title")
 	return out
 }
 
@@ -297,8 +297,42 @@ func mergeItems(dbItems, cacheItems []MediaItem) []MediaItem {
 	for _, item := range merged {
 		out = append(out, item)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	sortItems(out, "title")
 	return out
+}
+
+func normalizeSortBy(sortBy string) string {
+	sortBy = strings.ToLower(strings.TrimSpace(sortBy))
+	switch sortBy {
+	case "title", "modified", "size":
+		return sortBy
+	default:
+		return "title"
+	}
+}
+
+func sortItems(items []MediaItem, sortBy string) {
+	sortBy = normalizeSortBy(sortBy)
+	switch sortBy {
+	case "modified":
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].Modified.Equal(items[j].Modified) {
+				return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
+			}
+			return items[i].Modified.After(items[j].Modified)
+		})
+	case "size":
+		sort.Slice(items, func(i, j int) bool {
+			if items[i].Size == items[j].Size {
+				return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
+			}
+			return items[i].Size > items[j].Size
+		})
+	default:
+		sort.Slice(items, func(i, j int) bool {
+			return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
+		})
+	}
 }
 
 func diffItems(found, previous map[string]MediaItem, lastScan time.Time) []MediaItem {

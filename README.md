@@ -117,6 +117,15 @@ curl "http://localhost:8080/library?q=matrix"  # Filterung über Query möglich
 curl "http://localhost:8080/library?q=alien"
 # Erwartet: JSON-Array, gefiltert nach Titel-Substring "alien"
 
+curl "http://localhost:8080/library?sort=title"
+# Erwartet: JSON-Array, sortiert nach Titel (Standard)
+
+curl "http://localhost:8080/library?sort=modified"
+# Erwartet: JSON-Array, sortiert nach Änderungsdatum (neueste zuerst)
+
+curl "http://localhost:8080/library?sort=size"
+# Erwartet: JSON-Array, sortiert nach Größe (größte zuerst)
+
 curl.exe -X POST http://localhost:8080/library  # triggert einen Rescan (PowerShell: echtes curl)
 # Erwartet: Rescan wird angestoßen, Antwort: { "status": "ok" }
 
@@ -141,6 +150,7 @@ curl -X POST "http://localhost:8080/items/{id}/playback?clientId=my-player" \
 # Erwartet: Playback-Update (POST, clientId ist Pflicht)
 ```
 Der Query-Parameter `q` filtert nach Treffern im Titel.
+Der Query-Parameter `sort` unterstützt `title`, `modified` und `size` (Default: `title`).
 
 ## Checks (ffmpeg & SQLite)
 
