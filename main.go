@@ -25,6 +25,12 @@ var (
 )
 
 func main() {
+	if err := run(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	var (
 		root           = flag.String("root", "./media", "media root directory")
 		addr           = flag.String("addr", ":8080", "listen address")
@@ -55,41 +61,48 @@ func main() {
 
 	shouldExit, err := runSQLiteMaintenance(*db, options, *integrityCheck, *vacuum, *vacuumInto, *analyze)
 	if err != nil {
-		log.Fatalf("level=error msg=\"sqlite maintenance failed\" err=%v", err)
+		log.Printf("level=error msg=\"sqlite maintenance failed\" err=%v", err)
+		return err
 	}
 	if shouldExit {
-		return
+		return nil
 	}
 
 	scanInterval, err := time.ParseDuration(*scan)
 	if err != nil {
-		log.Fatalf("level=error msg=\"invalid scan interval\" scan=%q err=%v", *scan, err)
+		log.Printf("level=error msg=\"invalid scan interval\" scan=%q err=%v", *scan, err)
+		return err
 	}
 
 	wd, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("level=error msg=\"failed to get working directory\" err=%v", err)
+		log.Printf("level=error msg=\"failed to get working directory\" err=%v", err)
+		return err
 	}
 
 	ff, err := ffmpeg.Ensure(context.Background(), wd)
 	if err != nil {
-		log.Fatalf("level=error msg=\"failed to ensure ffmpeg\" err=%v", err)
+		log.Printf("level=error msg=\"failed to ensure ffmpeg\" err=%v", err)
+		return err
 	}
 	log.Printf("level=info msg=\"ffmpeg ready\" path=%s", ff)
 
 	if *dbReadOnly {
 		if err := ensureDBReadable(*db); err != nil {
-			log.Fatalf("level=error msg=\"failed to verify db path\" path=%s err=%v", *db, err)
+			log.Printf("level=error msg=\"failed to verify db path\" path=%s err=%v", *db, err)
+			return err
 		}
 	} else {
 		if err := ensureDBDir(*db); err != nil {
-			log.Fatalf("level=error msg=\"failed to ensure db path\" path=%s err=%v", *db, err)
+			log.Printf("level=error msg=\"failed to ensure db path\" path=%s err=%v", *db, err)
+			return err
 		}
 	}
 
 	store, err := storage.Open(*db, options)
 	if err != nil {
-		log.Fatalf("level=error msg=\"failed to open storage\" path=%s err=%v", *db, err)
+		log.Printf("level=error msg=\"failed to open storage\" path=%s err=%v", *db, err)
+		return err
 	}
 
 	versionInfo := server.VersionInfo{
@@ -99,7 +112,8 @@ func main() {
 	}
 	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, extensionList)
 	if err != nil {
-		log.Fatalf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
+		log.Printf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
+		return err
 	}
 
 	go func() {
@@ -112,7 +126,11 @@ func main() {
 	}()
 
 	log.Printf("level=info msg=\"server listening\" addr=%s root=%s url=http://localhost%s", *addr, *root, *addr)
-	log.Fatalf("level=error msg=\"server stopped\" err=%v", s.Start())
+	if err := s.Start(); err != nil {
+		log.Printf("level=error msg=\"server stopped\" err=%v", err)
+		return err
+	}
+	return nil
 }
 
 func defaultDBPath() string {
