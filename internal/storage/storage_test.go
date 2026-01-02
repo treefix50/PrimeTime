@@ -68,8 +68,9 @@ func TestEnsureSchema(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT MAX(version) FROM schema_migrations`).Scan(&version); err != nil {
 		t.Fatalf("query schema_migrations: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("unexpected schema version: got %d want 1", version)
+	expectedVersion := migrations[len(migrations)-1].version
+	if version != expectedVersion {
+		t.Fatalf("unexpected schema version: got %d want %d", version, expectedVersion)
 	}
 }
 
