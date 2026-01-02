@@ -1,9 +1,11 @@
 package server
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"os"
@@ -21,6 +23,7 @@ type MediaItem struct {
 	NFOPath   string    `json:"nfoPath,omitempty"`
 	Size      int64     `json:"size"`
 	Modified  time.Time `json:"modified"`
+	StableKey string    `json:"-"`
 }
 
 type Library struct {
@@ -146,7 +149,17 @@ func (l *Library) Scan() error {
 		title := strings.TrimSuffix(d.Name(), filepath.Ext(d.Name()))
 		nfo := guessNFOPath(path)
 
-		id := stableID(path)
+		stableKey := stableID(path, info)
+		id := stableKey
+		if l.store != nil {
+			if existingID, ok, err := l.store.GetIDByPath(path); err != nil {
+				scanErrs = append(scanErrs, err)
+			} else if ok {
+				id = existingID
+			} else if !storeReadOnly(l.store) {
+				id = newUUID()
+			}
+		}
 
 		found[id] = MediaItem{
 			ID:        id,
@@ -155,6 +168,7 @@ func (l *Library) Scan() error {
 			NFOPath:   nfo,
 			Size:      info.Size(),
 			Modified:  info.ModTime(),
+			StableKey: stableKey,
 		}
 		return nil
 	})
@@ -373,7 +387,8 @@ func mediaItemEqual(a, b MediaItem) bool {
 		a.VideoPath == b.VideoPath &&
 		a.NFOPath == b.NFOPath &&
 		a.Size == b.Size &&
-		a.Modified.Equal(b.Modified)
+		a.Modified.Equal(b.Modified) &&
+		a.StableKey == b.StableKey
 }
 
 func guessNFOPath(videoPath string) string {
@@ -385,7 +400,24 @@ func guessNFOPath(videoPath string) string {
 	return ""
 }
 
-func stableID(s string) string {
-	h := sha1.Sum([]byte(s))
+func stableID(path string, info fs.FileInfo) string {
+	identity := path
+	if fileID, ok := fileIdentity(info); ok {
+		identity = fmt.Sprintf("%s|%s", path, fileID)
+	} else {
+		identity = fmt.Sprintf("%s|%d|%d", path, info.Size(), info.ModTime().UnixNano())
+	}
+	h := sha1.Sum([]byte(identity))
 	return hex.EncodeToString(h[:8]) // short but stable
+}
+
+func newUUID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		h := sha1.Sum([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+		return hex.EncodeToString(h[:16])
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
