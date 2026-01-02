@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -172,25 +173,27 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		query := strings.TrimSpace(r.URL.Query().Get("q"))
 		sortBy := normalizeSortBy(r.URL.Query().Get("sort"))
+		limit, offset, ok := parseLimitOffset(r)
+		if !ok {
+			s.writeError(w, "bad request", http.StatusBadRequest)
+			return
+		}
 		if s.lib.store == nil {
 			items := s.lib.All()
 			if query != "" {
 				items = filterItems(items, query)
 			}
 			sortItems(items, sortBy)
+			items = applyLimitOffset(items, limit, offset)
 			writeJSON(w, r, items)
 			return
 		}
 
-		items, err := s.lib.store.GetAll()
+		items, err := s.lib.store.GetAllLimited(limit, offset, sortBy, query)
 		if err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
 		}
-		if query != "" {
-			items = filterItems(items, query)
-		}
-		sortItems(items, sortBy)
 		writeJSON(w, r, items)
 	case http.MethodPost:
 		if s.readOnly {
@@ -483,4 +486,39 @@ func filterItems(items []MediaItem, query string) []MediaItem {
 		}
 	}
 	return filtered
+}
+
+func applyLimitOffset(items []MediaItem, limit, offset int) []MediaItem {
+	if offset > 0 {
+		if offset >= len(items) {
+			return []MediaItem{}
+		}
+		items = items[offset:]
+	}
+	if limit > 0 && limit < len(items) {
+		items = items[:limit]
+	}
+	return items
+}
+
+func parseLimitOffset(r *http.Request) (int, int, bool) {
+	limit := 0
+	offset := 0
+	limitRaw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if limitRaw != "" {
+		parsed, err := strconv.Atoi(limitRaw)
+		if err != nil || parsed < 0 {
+			return 0, 0, false
+		}
+		limit = parsed
+	}
+	offsetRaw := strings.TrimSpace(r.URL.Query().Get("offset"))
+	if offsetRaw != "" {
+		parsed, err := strconv.Atoi(offsetRaw)
+		if err != nil || parsed < 0 {
+			return 0, 0, false
+		}
+		offset = parsed
+	}
+	return limit, offset, true
 }

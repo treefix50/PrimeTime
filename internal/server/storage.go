@@ -14,6 +14,7 @@ type MediaStore interface {
 	SaveItems(items []MediaItem) error
 	DeleteItems(ids []string) error
 	GetAll() ([]MediaItem, error)
+	GetAllLimited(limit, offset int, sortBy, query string) ([]MediaItem, error)
 	GetByID(id string) (MediaItem, bool, error)
 	SaveNFO(mediaID string, nfo *NFO) error
 	DeleteNFO(mediaID string) error

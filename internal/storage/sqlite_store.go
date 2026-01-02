@@ -316,6 +316,80 @@ func (s *Store) GetAll() ([]server.MediaItem, error) {
 	return items, nil
 }
 
+func (s *Store) GetAllLimited(limit, offset int, sortBy, query string) ([]server.MediaItem, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("storage: missing database connection")
+	}
+	if limit < 0 || offset < 0 {
+		return nil, fmt.Errorf("storage: limit/offset must be non-negative")
+	}
+
+	orderBy := "title COLLATE NOCASE"
+	switch strings.ToLower(strings.TrimSpace(sortBy)) {
+	case "modified":
+		orderBy = "modified DESC, title COLLATE NOCASE"
+	case "size":
+		orderBy = "size DESC, title COLLATE NOCASE"
+	}
+
+	where := ""
+	args := []any{}
+	normalizedQuery := strings.TrimSpace(query)
+	if normalizedQuery != "" {
+		where = "WHERE lower(COALESCE(title, '')) LIKE ?"
+		args = append(args, "%"+strings.ToLower(normalizedQuery)+"%")
+	}
+
+	limitValue := limit
+	if limitValue == 0 {
+		limitValue = -1
+	}
+	args = append(args, limitValue, offset)
+
+	querySQL := fmt.Sprintf(`
+		SELECT id, path, title, size, modified, nfo_path
+		FROM media_items
+		%s
+		ORDER BY %s
+		LIMIT ? OFFSET ?
+	`, where, orderBy)
+
+	rows, err := s.db.Query(querySQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []server.MediaItem
+	for rows.Next() {
+		var (
+			id       string
+			path     string
+			title    sql.NullString
+			size     int64
+			modified int64
+			nfoPath  sql.NullString
+		)
+		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath); err != nil {
+			return nil, err
+		}
+		items = append(items, server.MediaItem{
+			ID:        id,
+			VideoPath: path,
+			Title:     title.String,
+			Size:      size,
+			Modified:  time.Unix(modified, 0),
+			NFOPath:   nfoPath.String,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return items, nil
+}
+
 func (s *Store) GetByID(id string) (server.MediaItem, bool, error) {
 	if s == nil || s.db == nil {
 		return server.MediaItem{}, false, fmt.Errorf("storage: missing database connection")
