@@ -58,10 +58,16 @@ Weitere Optionen:
 * `-scan-interval` (Intervall für automatische Scans; Default: `10m`; `0` deaktiviert die Scans)
 * `-no-initial-scan` (überspringt den initialen Scan beim Start)
 * `-cors` (aktiviert `Access-Control-Allow-Origin: *`)
+* `-json-errors` (JSON-Fehlerantworten statt Plain-Text)
+* `-extensions` (kommagetrennte Dateiendungen für den Scan)
 * `-db-busy-timeout` (SQLite Busy-Timeout; Default: `5s`; `0` deaktiviert)
 * `-db-synchronous` (SQLite Synchronous-Modus; Default: `NORMAL`)
 * `-db-cache-size` (SQLite Cache-Size; Default: `-65536` = ca. 64 MiB)
 * `-db-read-only` (öffnet die SQLite-DB schreibgeschützt; intern `file:...?...&mode=ro`)
+* `-sqlite-integrity-check` (führt `PRAGMA integrity_check` aus und beendet sich)
+* `-sqlite-vacuum` (führt `VACUUM` aus und beendet sich)
+* `-sqlite-vacuum-into` (führt `VACUUM INTO` für ein DB-Backup aus und beendet sich)
+* `-sqlite-analyze` (führt `ANALYZE` aus und beendet sich)
 
 ### Read-only-Modus
 
