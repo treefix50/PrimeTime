@@ -39,6 +39,11 @@ type Library struct {
 	lastScan time.Time
 }
 
+var (
+	ErrInvalidScanPath  = errors.New("invalid scan path")
+	ErrScanPathNotFound = errors.New("scan path not found")
+)
+
 var defaultExtensions = []string{
 	".avi",
 	".m2ts",
@@ -113,6 +118,164 @@ func NewLibrary(root string, store MediaStore, extensions []string) (*Library, e
 		store:             store,
 		allowedExtensions: buildAllowedExtensions(extensions),
 	}, nil
+}
+
+func (l *Library) ScanPath(path string) error {
+	targetPath, info, err := l.resolveScanPath(path)
+	if err != nil {
+		return err
+	}
+
+	found := map[string]MediaItem{}
+	var scanErrs []error
+	var scanRunID string
+	if l.store != nil && l.rootID != "" {
+		run, err := l.store.StartScanRun(l.rootID, time.Now())
+		if err != nil {
+			scanErrs = append(scanErrs, err)
+		} else {
+			scanRunID = run.ID
+		}
+	}
+
+	addFile := func(path string, info fs.FileInfo) {
+		ext := strings.ToLower(filepath.Ext(info.Name()))
+		if !l.allowedExtensions[ext] {
+			return
+		}
+
+		rawTitle := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
+		title := rawTitle
+		if parsedTitle, _, _, ok := parseEpisodeInfo(rawTitle); ok {
+			title = parsedTitle
+		}
+		nfo := guessNFOPath(path)
+
+		stableKey := stableID(path, info)
+		id := stableKey
+		if l.store != nil {
+			if existingID, ok, err := l.store.GetIDByPath(path); err != nil {
+				scanErrs = append(scanErrs, err)
+			} else if ok {
+				id = existingID
+			} else if !storeReadOnly(l.store) {
+				id = newUUID()
+			}
+		}
+
+		found[id] = MediaItem{
+			ID:        id,
+			Title:     title,
+			VideoPath: path,
+			NFOPath:   nfo,
+			Size:      info.Size(),
+			Modified:  info.ModTime(),
+			StableKey: stableKey,
+		}
+	}
+
+	if info.IsDir() {
+		err = filepath.WalkDir(targetPath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				scanErrs = append(scanErrs, err)
+				return nil
+			}
+			if d.IsDir() {
+				return nil
+			}
+			info, err := d.Info()
+			if err != nil {
+				scanErrs = append(scanErrs, err)
+				return nil
+			}
+			addFile(path, info)
+			return nil
+		})
+		if err != nil {
+			scanErrs = append(scanErrs, err)
+		}
+	} else {
+		addFile(targetPath, info)
+	}
+
+	l.mu.Lock()
+	previous := l.items
+	lastScan := l.lastScan
+	updated := make(map[string]MediaItem, len(previous)+len(found))
+	previousWithin := make(map[string]MediaItem)
+	for id, item := range previous {
+		if pathWithin(targetPath, item.VideoPath) {
+			previousWithin[id] = item
+			continue
+		}
+		updated[id] = item
+	}
+	for id, item := range found {
+		updated[id] = item
+	}
+	l.items = updated
+	l.lastScan = time.Now()
+	l.mu.Unlock()
+
+	if l.store != nil {
+		idsToDelete := removedIDs(previousWithin, found)
+		if len(idsToDelete) > 0 {
+			if err := l.store.DeleteItems(idsToDelete); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
+		itemsToSave := diffItems(found, previousWithin, lastScan)
+		if len(itemsToSave) > 0 {
+			if err := l.store.SaveItems(itemsToSave); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
+		for _, item := range found {
+			if item.NFOPath == "" {
+				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
+					if err := l.store.SaveNFO(item.ID, fallback); err != nil {
+						scanErrs = append(scanErrs, err)
+					}
+					continue
+				}
+				if err := l.store.DeleteNFO(item.ID); err != nil {
+					scanErrs = append(scanErrs, err)
+				}
+				continue
+			}
+			nfo, err := ParseNFOFile(item.NFOPath)
+			if err != nil {
+				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", item.NFOPath, err)
+				continue
+			}
+			if err := l.store.SaveNFO(item.ID, nfo); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
+	}
+
+	var scanErr error
+	if len(scanErrs) > 0 {
+		scanErr = errors.Join(scanErrs...)
+	}
+	if scanRunID != "" {
+		finishedAt := time.Now()
+		if scanErr != nil {
+			if err := l.store.FailScanRun(scanRunID, finishedAt, scanErr.Error()); err != nil {
+				scanErrs = append(scanErrs, err)
+				scanErr = errors.Join(scanErrs...)
+			}
+		} else {
+			if err := l.store.FinishScanRun(scanRunID, finishedAt); err != nil {
+				scanErrs = append(scanErrs, err)
+				scanErr = errors.Join(scanErrs...)
+			}
+		}
+	}
+	if scanErr != nil {
+		return scanErr
+	}
+	return nil
 }
 
 func (l *Library) Scan() error {
@@ -248,6 +411,50 @@ func (l *Library) Scan() error {
 		return scanErr
 	}
 	return nil
+}
+
+func (l *Library) resolveScanPath(path string) (string, fs.FileInfo, error) {
+	cleanPath := strings.TrimSpace(path)
+	if cleanPath == "" {
+		return "", nil, ErrInvalidScanPath
+	}
+	cleanPath = filepath.Clean(cleanPath)
+	if !filepath.IsAbs(cleanPath) {
+		cleanPath = filepath.Join(l.root, cleanPath)
+	}
+	rootAbs, err := filepath.Abs(l.root)
+	if err != nil {
+		return "", nil, err
+	}
+	targetAbs, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return "", nil, err
+	}
+	if !pathWithin(rootAbs, targetAbs) {
+		return "", nil, ErrInvalidScanPath
+	}
+	info, err := os.Stat(targetAbs)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", nil, ErrScanPathNotFound
+		}
+		return "", nil, err
+	}
+	return targetAbs, info, nil
+}
+
+func pathWithin(basePath, targetPath string) bool {
+	rel, err := filepath.Rel(basePath, targetPath)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	if rel == ".." {
+		return false
+	}
+	return !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (l *Library) All() []MediaItem {
