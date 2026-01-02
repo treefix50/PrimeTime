@@ -4,6 +4,11 @@ PrimeTime ist ein minimalistischer Media-Server in Go.
 Er stellt Video-Dateien (.mkv, .mp4, .m2ts) und optionale Metadaten (.nfo) sowie Untertitel (.srt/.vtt) über HTTP bereit.
 Es gibt kein Web-Interface und keine Authentifizierung.
 
+## HTTP-Caching (ETag)
+
+Für Video-Streams und Text-Dateien (z. B. NFO/Untertitel) setzt PrimeTime einen `ETag`, der aus Dateigröße und Änderungszeit berechnet wird.
+Wenn der Client einen passenden `If-None-Match` mitsendet, antwortet der Server mit `304 Not Modified`.
+
 ## Unterstützte NFO-Typen
 
 PrimeTime liest Kodi-kompatible XML-`*.nfo` Dateien und mappt die wichtigsten Felder:
