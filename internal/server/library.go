@@ -129,7 +129,8 @@ func (l *Library) ScanPath(path string) error {
 	found := map[string]MediaItem{}
 	var scanErrs []error
 	var scanRunID string
-	if l.store != nil && l.rootID != "" {
+	canWrite := l.store != nil && !storeReadOnly(l.store)
+	if canWrite && l.rootID != "" {
 		run, err := l.store.StartScanRun(l.rootID, time.Now())
 		if err != nil {
 			scanErrs = append(scanErrs, err)
@@ -219,18 +220,21 @@ func (l *Library) ScanPath(path string) error {
 
 	if l.store != nil {
 		idsToDelete := removedIDs(previousWithin, found)
-		if len(idsToDelete) > 0 {
+		if canWrite && len(idsToDelete) > 0 {
 			if err := l.store.DeleteItems(idsToDelete); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}
 		itemsToSave := diffItems(found, previousWithin, lastScan)
-		if len(itemsToSave) > 0 {
+		if canWrite && len(itemsToSave) > 0 {
 			if err := l.store.SaveItems(itemsToSave); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}
 		for _, item := range found {
+			if !canWrite {
+				break
+			}
 			if item.NFOPath == "" {
 				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
 					if err := l.store.SaveNFO(item.ID, fallback); err != nil {
@@ -282,7 +286,8 @@ func (l *Library) Scan() error {
 	found := map[string]MediaItem{}
 	var scanErrs []error
 	var scanRunID string
-	if l.store != nil && l.rootID != "" {
+	canWrite := l.store != nil && !storeReadOnly(l.store)
+	if canWrite && l.rootID != "" {
 		run, err := l.store.StartScanRun(l.rootID, time.Now())
 		if err != nil {
 			scanErrs = append(scanErrs, err)
@@ -354,18 +359,21 @@ func (l *Library) Scan() error {
 
 	if l.store != nil {
 		idsToDelete := removedIDs(previous, found)
-		if len(idsToDelete) > 0 {
+		if canWrite && len(idsToDelete) > 0 {
 			if err := l.store.DeleteItems(idsToDelete); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}
 		itemsToSave := diffItems(found, previous, lastScan)
-		if len(itemsToSave) > 0 {
+		if canWrite && len(itemsToSave) > 0 {
 			if err := l.store.SaveItems(itemsToSave); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}
 		for _, item := range found {
+			if !canWrite {
+				break
+			}
 			if item.NFOPath == "" {
 				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
 					if err := l.store.SaveNFO(item.ID, fallback); err != nil {

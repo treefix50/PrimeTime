@@ -92,6 +92,7 @@ Weitere Optionen:
 * `-db-synchronous` (SQLite Synchronous-Modus; Default: `NORMAL`)
 * `-db-cache-size` (SQLite Cache-Size; Default: `-65536` = ca. 64 MiB)
 * `-db-read-only` (öffnet die SQLite-DB schreibgeschützt; intern `file:...?...&mode=ro`)
+* `-read-only-scan` (erlaubt Scans im Read-only-Modus; Ergebnisse nur im In-Memory-Cache)
 * `-sqlite-integrity-check` (führt `PRAGMA integrity_check` aus und beendet sich)
 * `-sqlite-vacuum` (führt `VACUUM` aus und beendet sich)
 * `-sqlite-vacuum-into` (führt `VACUUM INTO` für ein DB-Backup aus und beendet sich)
@@ -102,8 +103,13 @@ Weitere Optionen:
 Mit `-db-read-only` wird die Datenbank nur lesend geöffnet. Voraussetzungen und Verhalten:
 
 * Die DB-Datei muss bereits existieren (kein Auto-Create).
-* Initialer Scan und periodische Scans sind deaktiviert.
+* Initialer Scan und periodische Scans sind deaktiviert (außer mit `-read-only-scan`).
 * Schreibende Endpoints wie `POST /library` (Rescan) und `POST /items/{id}/playback` liefern `403`.
+
+Mit `-read-only-scan` sind Scans auch im Read-only-Modus möglich. Dabei gilt:
+
+* Scan-Ergebnisse landen ausschließlich im In-Memory-Cache.
+* Schreibzugriffe auf die DB (z. B. Scan-Runs, NFOs, Items) bleiben deaktiviert.
 
 ### SQLite-Konfiguration (PRAGMA)
 
