@@ -158,6 +158,7 @@ curl -X POST "http://localhost:8080/items/{id}/playback?clientId=my-player" \
   -d '{ "position": 123.45, "state": "playing" }'
 # Erwartet: Playback-Update (POST, clientId ist Pflicht)
 ```
+Playback-`progress`-Updates werden pro `(mediaID, clientId)` im Speicher gedrosselt (derzeit mindestens 5 Sekunden Abstand).
 Der Query-Parameter `q` filtert nach Treffern im Titel.
 Der Query-Parameter `sort` unterstützt `title`, `modified` und `size` (Default: `title`).
 Der Query-Parameter `limit` begrenzt die Anzahl der Einträge; `offset` überspringt die ersten N Einträge.
