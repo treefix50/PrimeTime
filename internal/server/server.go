@@ -32,6 +32,7 @@ type Server struct {
 	readOnly          bool
 	allowReadOnlyScan bool
 	ffmpegReady       bool
+	ffmpegPath        string
 	startedAt         time.Time
 	version           VersionInfo
 	scanInterval      time.Duration
@@ -41,6 +42,7 @@ type Server struct {
 	scanWg            sync.WaitGroup
 	manualScanLimiter *RateLimiter
 	playbackLimiter   *RateLimiter
+	transcodingMgr    *TranscodingManager
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter) {
@@ -53,7 +55,7 @@ type VersionInfo struct {
 	BuildDate string `json:"buildDate"`
 }
 
-func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, ffmpegReady bool, allowReadOnlyScan bool, extensions []string) (*Server, error) {
+func New(root, addr string, store MediaStore, scanInterval time.Duration, noInitialScan bool, cors bool, jsonErrors bool, version VersionInfo, ffmpegReady bool, allowReadOnlyScan bool, extensions []string, ffmpegPath string) (*Server, error) {
 	lib, err := NewLibrary(root, store, extensions)
 	if err != nil {
 		return nil, err
@@ -70,6 +72,10 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 
 	mux := http.NewServeMux()
 
+	// Initialize transcoding manager
+	cacheDir := filepath.Join(root, "..", "cache", "transcoding")
+	transcodingMgr := NewTranscodingManager(ffmpegPath, cacheDir, store)
+
 	s := &Server{
 		addr:              addr,
 		lib:               lib,
@@ -78,11 +84,13 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		readOnly:          readOnly,
 		allowReadOnlyScan: allowReadOnlyScan,
 		ffmpegReady:       ffmpegReady,
+		ffmpegPath:        ffmpegPath,
 		startedAt:         time.Now(),
 		version:           version,
 		scanInterval:      scanInterval,
 		manualScanLimiter: NewRateLimiter(manualScanRateLimit),
 		playbackLimiter:   NewRateLimiter(playbackProgressMin),
+		transcodingMgr:    transcodingMgr,
 	}
 
 	if s.scanInterval > 0 && (!s.readOnly || s.allowReadOnlyScan) {
@@ -97,7 +105,26 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	mux.HandleFunc("/version", s.handleVersion)
 	mux.HandleFunc("/library", s.handleLibrary)
 	mux.HandleFunc("/library/scan", s.handleLibraryScan)
+	mux.HandleFunc("/library/duplicates", s.handleLibraryDuplicates)
+	mux.HandleFunc("/library/recent", s.handleLibraryRecent)
+	mux.HandleFunc("/playback", s.handlePlayback)
+	mux.HandleFunc("/favorites", s.handleFavorites)
+	mux.HandleFunc("/watched", s.handleWatched)
+	mux.HandleFunc("/collections", s.handleCollections)
+	mux.HandleFunc("/collections/", s.handleCollectionDetail)
 	mux.HandleFunc("/items/", s.handleItems)
+
+	// Verbesserung 1: Multi-User-Support
+	mux.HandleFunc("/users", s.handleUsers)
+	mux.HandleFunc("/users/", s.handleUserDetail)
+
+	// Verbesserung 2: Transkodierungs-Profile
+	mux.HandleFunc("/transcoding/profiles", s.handleTranscodingProfiles)
+	mux.HandleFunc("/transcoding/profiles/", s.handleTranscodingProfileDetail)
+
+	// Verbesserung 3: TV Shows/Serien-Verwaltung
+	mux.HandleFunc("/shows", s.handleTVShows)
+	mux.HandleFunc("/shows/", s.handleTVShowDetail)
 
 	s.http = &http.Server{
 		Addr:              addr,
@@ -187,6 +214,19 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		s.methodNotAllowed(w)
 		return
 	}
+
+	// Verbesserung 5: Erweiterte Statistiken
+	detailed := strings.TrimSpace(r.URL.Query().Get("detailed"))
+	if detailed != "" && s.lib.store != nil {
+		stats, err := s.lib.store.GetDetailedStats()
+		if err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, r, stats)
+		return
+	}
+
 	totalItems, lastScan, err := s.lib.Stats()
 	if err != nil {
 		s.writeError(w, errInternal, http.StatusInternalServerError)
@@ -212,6 +252,13 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, "bad request", http.StatusBadRequest)
 			return
 		}
+
+		// Verbesserung 3: Erweiterte Suchfunktionalität
+		genre := strings.TrimSpace(r.URL.Query().Get("genre"))
+		year := strings.TrimSpace(r.URL.Query().Get("year"))
+		itemType := strings.TrimSpace(r.URL.Query().Get("type"))
+		rating := strings.TrimSpace(r.URL.Query().Get("rating"))
+
 		if s.lib.store == nil {
 			items := s.lib.All()
 			if query != "" {
@@ -223,7 +270,7 @@ func (s *Server) handleLibrary(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		items, err := s.lib.store.GetAllLimited(limit, offset, sortBy, query)
+		items, err := s.lib.store.GetAllLimitedWithFilters(limit, offset, sortBy, query, genre, year, itemType, rating)
 		if err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
@@ -308,13 +355,60 @@ func playbackRateLimitError(wait time.Duration) string {
 	return fmt.Sprintf("playback update zu früh, bitte in %ds erneut versuchen", waitSeconds)
 }
 
-// Routes under /items/{id}[/{action}...]
-func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
-	if s.handleOptions(w, r, "GET, POST, OPTIONS") {
+// Verbesserung 4: Duplicate Detection
+func (s *Server) handleLibraryDuplicates(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
 		return
 	}
 
-	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+	duplicates, err := s.lib.store.GetDuplicates()
+	if err != nil {
+		s.writeError(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, duplicates)
+}
+
+// Verbesserung 2: Batch-Operations für Playback-State
+func (s *Server) handlePlayback(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
+		return
+	}
+
+	clientID := strings.TrimSpace(r.URL.Query().Get("clientId"))
+	onlyUnfinished := strings.TrimSpace(r.URL.Query().Get("unfinished")) != ""
+
+	states, err := s.lib.store.GetAllPlaybackStates(clientID, onlyUnfinished)
+	if err != nil {
+		s.writeError(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, states)
+}
+
+// Routes under /items/{id}[/{action}...]
+func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, POST, DELETE, OPTIONS") {
+		return
+	}
+
+	if r.Method != http.MethodGet && r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		s.methodNotAllowed(w)
 		return
 	}
@@ -383,11 +477,30 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, item)
 
 	case "stream":
-		// /items/{id}/stream
+		// /items/{id}/stream  OR  /items/{id}/stream.m3u8
 		if r.Method != http.MethodGet {
 			s.methodNotAllowed(w)
 			return
 		}
+
+		// Check for HLS request
+		if len(parts) >= 2 && strings.HasSuffix(parts[1], ".m3u8") {
+			profileName := strings.TrimSpace(r.URL.Query().Get("profile"))
+			if profileName == "" {
+				profileName = "720p" // Default profile for HLS
+			}
+			s.handleHLSStream(w, r, item, profileName)
+			return
+		}
+
+		// Check for transcoding profile parameter
+		profileName := strings.TrimSpace(r.URL.Query().Get("profile"))
+		if profileName != "" && profileName != "original" {
+			s.handleTranscodedStream(w, r, item, profileName)
+			return
+		}
+
+		// Serve original file
 		ServeVideoFile(w, r, item.VideoPath)
 
 	case "nfo":
@@ -506,12 +619,6 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 					s.writeError(w, errInternal, http.StatusInternalServerError)
 					return
 				}
-				if clientID != "" {
-					key := item.ID + "|" + clientID
-					s.playbackMu.Lock()
-					delete(s.playbackLast, key)
-					s.playbackMu.Unlock()
-				}
 				writeJSON(w, r, map[string]string{"status": "ok"})
 				return
 			}
@@ -532,6 +639,144 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		default:
 			s.methodNotAllowed(w)
 		}
+
+	case "watched":
+		// /items/{id}/watched
+		if s.lib.store == nil {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			watched, err := s.lib.store.IsWatched(item.ID)
+			if err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]bool{"watched": watched})
+		case http.MethodPost:
+			if s.readOnly {
+				s.writeError(w, "read-only mode", http.StatusForbidden)
+				return
+			}
+			if err := s.lib.store.MarkWatched(item.ID, time.Now()); err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+		case http.MethodDelete:
+			if s.readOnly {
+				s.writeError(w, "read-only mode", http.StatusForbidden)
+				return
+			}
+			if err := s.lib.store.UnmarkWatched(item.ID); err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+		default:
+			s.methodNotAllowed(w)
+		}
+
+	case "favorite":
+		// /items/{id}/favorite
+		if s.lib.store == nil {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+
+		switch r.Method {
+		case http.MethodGet:
+			favorite, err := s.lib.store.IsFavorite(item.ID)
+			if err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]bool{"favorite": favorite})
+		case http.MethodPost:
+			if s.readOnly {
+				s.writeError(w, "read-only mode", http.StatusForbidden)
+				return
+			}
+			if err := s.lib.store.AddFavorite(item.ID, time.Now()); err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+		case http.MethodDelete:
+			if s.readOnly {
+				s.writeError(w, "read-only mode", http.StatusForbidden)
+				return
+			}
+			if err := s.lib.store.RemoveFavorite(item.ID); err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+		default:
+			s.methodNotAllowed(w)
+		}
+
+	case "poster":
+		// /items/{id}/poster  OR  /items/{id}/poster/exists
+		if r.Method != http.MethodGet {
+			s.methodNotAllowed(w)
+			return
+		}
+
+		if len(parts) == 3 && parts[2] == "exists" {
+			var exists bool
+			if s.lib.store != nil {
+				posterPath, ok, err := s.lib.store.GetPosterPath(item.ID)
+				if err != nil {
+					s.writeError(w, errInternal, http.StatusInternalServerError)
+					return
+				}
+				exists = ok && posterPath != ""
+			}
+			if !exists {
+				posterPath, exists := FindPosterForVideo(item.VideoPath)
+				if exists && s.lib.store != nil && !s.readOnly {
+					_ = s.lib.store.SetPosterPath(item.ID, posterPath)
+				}
+			}
+			writeJSON(w, r, map[string]bool{"exists": exists})
+			return
+		}
+
+		if len(parts) != 2 {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+
+		var posterPath string
+		if s.lib.store != nil {
+			path, ok, err := s.lib.store.GetPosterPath(item.ID)
+			if err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			if ok && path != "" {
+				posterPath = path
+			}
+		}
+
+		if posterPath == "" {
+			path, ok := FindPosterForVideo(item.VideoPath)
+			if !ok {
+				s.writeError(w, errNotFound, http.StatusNotFound)
+				return
+			}
+			posterPath = path
+			if s.lib.store != nil && !s.readOnly {
+				_ = s.lib.store.SetPosterPath(item.ID, posterPath)
+			}
+		}
+
+		contentType := GetPosterContentType(posterPath)
+		w.Header().Set("Content-Type", contentType)
+		http.ServeFile(w, r, posterPath)
 
 	default:
 		s.writeError(w, errNotFound, http.StatusNotFound)
@@ -653,4 +898,321 @@ func parseLimitOffset(r *http.Request) (int, int, bool) {
 		offset = parsed
 	}
 	return limit, offset, true
+}
+
+// Erweiterung 3: Recently Added
+func (s *Server) handleLibraryRecent(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
+		return
+	}
+
+	limit := 20
+	limitRaw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if limitRaw != "" {
+		if parsed, err := strconv.Atoi(limitRaw); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	days := 0
+	daysRaw := strings.TrimSpace(r.URL.Query().Get("days"))
+	if daysRaw != "" {
+		if parsed, err := strconv.Atoi(daysRaw); err == nil && parsed > 0 {
+			days = parsed
+		}
+	}
+
+	itemType := strings.TrimSpace(r.URL.Query().Get("type"))
+
+	items, err := s.lib.store.GetRecentlyAdded(limit, days, itemType)
+	if err != nil {
+		s.writeError(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, items)
+}
+
+// Erweiterung 2: Favorites
+func (s *Server) handleFavorites(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
+		return
+	}
+
+	limit, offset, ok := parseLimitOffset(r)
+	if !ok {
+		s.writeError(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	items, err := s.lib.store.GetFavorites(limit, offset)
+	if err != nil {
+		s.writeError(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, items)
+}
+
+// Erweiterung 1: Watched
+func (s *Server) handleWatched(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, OPTIONS") {
+		return
+	}
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
+		return
+	}
+
+	limit, offset, ok := parseLimitOffset(r)
+	if !ok {
+		s.writeError(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	items, err := s.lib.store.GetWatchedItems(limit, offset)
+	if err != nil {
+		s.writeError(w, errInternal, http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, r, items)
+}
+
+// Erweiterung 4: Collections
+func (s *Server) handleCollections(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, POST, OPTIONS") {
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		limit, offset, ok := parseLimitOffset(r)
+		if !ok {
+			s.writeError(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		collections, err := s.lib.store.GetCollections(limit, offset)
+		if err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, r, collections)
+
+	case http.MethodPost:
+		if s.readOnly {
+			s.writeError(w, "read-only mode", http.StatusForbidden)
+			return
+		}
+
+		var payload struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			s.writeError(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(payload.Name) == "" {
+			s.writeError(w, "name is required", http.StatusBadRequest)
+			return
+		}
+
+		id := newCollectionID()
+		if err := s.lib.store.CreateCollection(id, payload.Name, payload.Description, time.Now()); err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+
+		collection, ok, err := s.lib.store.GetCollection(id)
+		if err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+		writeJSON(w, r, collection)
+
+	default:
+		s.methodNotAllowed(w)
+	}
+}
+
+func (s *Server) handleCollectionDetail(w http.ResponseWriter, r *http.Request) {
+	if s.handleOptions(w, r, "GET, PUT, DELETE, POST, OPTIONS") {
+		return
+	}
+	if s.lib.store == nil {
+		s.writeError(w, "not available without database", http.StatusNotImplemented)
+		return
+	}
+
+	path := strings.TrimPrefix(r.URL.Path, "/collections/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 1 || parts[0] == "" {
+		s.writeError(w, errNotFound, http.StatusNotFound)
+		return
+	}
+
+	collectionID := parts[0]
+	action := ""
+	if len(parts) >= 2 {
+		action = parts[1]
+	}
+
+	if action == "items" {
+		// /collections/{id}/items
+		switch r.Method {
+		case http.MethodGet:
+			items, err := s.lib.store.GetCollectionItems(collectionID)
+			if err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, items)
+
+		case http.MethodPost:
+			if s.readOnly {
+				s.writeError(w, "read-only mode", http.StatusForbidden)
+				return
+			}
+
+			var payload struct {
+				MediaID  string `json:"mediaId"`
+				Position int    `json:"position"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				s.writeError(w, "bad request", http.StatusBadRequest)
+				return
+			}
+
+			if strings.TrimSpace(payload.MediaID) == "" {
+				s.writeError(w, "mediaId is required", http.StatusBadRequest)
+				return
+			}
+
+			if err := s.lib.store.AddItemToCollection(collectionID, payload.MediaID, payload.Position, time.Now()); err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+
+		case http.MethodDelete:
+			if s.readOnly {
+				s.writeError(w, "read-only mode", http.StatusForbidden)
+				return
+			}
+
+			if len(parts) < 3 {
+				s.writeError(w, "mediaId is required", http.StatusBadRequest)
+				return
+			}
+
+			mediaID := parts[2]
+			if err := s.lib.store.RemoveItemFromCollection(collectionID, mediaID); err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, r, map[string]string{"status": "ok"})
+
+		default:
+			s.methodNotAllowed(w)
+		}
+		return
+	}
+
+	// /collections/{id}
+	switch r.Method {
+	case http.MethodGet:
+		collection, ok, err := s.lib.store.GetCollection(collectionID)
+		if err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+		writeJSON(w, r, collection)
+
+	case http.MethodPut:
+		if s.readOnly {
+			s.writeError(w, "read-only mode", http.StatusForbidden)
+			return
+		}
+
+		var payload struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			s.writeError(w, "bad request", http.StatusBadRequest)
+			return
+		}
+
+		if strings.TrimSpace(payload.Name) == "" {
+			s.writeError(w, "name is required", http.StatusBadRequest)
+			return
+		}
+
+		if err := s.lib.store.UpdateCollection(collectionID, payload.Name, payload.Description, time.Now()); err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+
+		collection, ok, err := s.lib.store.GetCollection(collectionID)
+		if err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+		writeJSON(w, r, collection)
+
+	case http.MethodDelete:
+		if s.readOnly {
+			s.writeError(w, "read-only mode", http.StatusForbidden)
+			return
+		}
+
+		if err := s.lib.store.DeleteCollection(collectionID); err != nil {
+			s.writeError(w, errInternal, http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, r, map[string]string{"status": "ok"})
+
+	default:
+		s.methodNotAllowed(w)
+	}
+}
+
+func newCollectionID() string {
+	return fmt.Sprintf("col_%d", time.Now().UnixNano())
 }

@@ -19,6 +19,13 @@ type NFO struct {
 	Episode     string   `json:"episode,omitempty"`
 	ShowTitle   string   `json:"showTitle,omitempty"`
 	RawRootName string   `json:"rawRoot"`
+	// Verbesserung 1: Erweiterte Metadaten-Felder
+	Actors    []string `json:"actors,omitempty"`
+	Directors []string `json:"directors,omitempty"`
+	Studios   []string `json:"studios,omitempty"`
+	Runtime   string   `json:"runtime,omitempty"`
+	IMDbID    string   `json:"imdbId,omitempty"`
+	TMDbID    string   `json:"tmdbId,omitempty"`
 }
 
 // ParseNFOFile parses a Kodi-style XML .nfo file.
@@ -46,6 +53,12 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Year          string   `xml:"year"`
 			Rating        string   `xml:"rating"`
 			Genres        []string `xml:"genre"`
+			Actors        []string `xml:"actor>name"`
+			Directors     []string `xml:"director"`
+			Studios       []string `xml:"studio"`
+			Runtime       string   `xml:"runtime"`
+			IMDbID        string   `xml:"id"`
+			TMDbID        string   `xml:"tmdbid"`
 		}
 
 		if err := xml.Unmarshal(data, &m); err != nil {
@@ -60,6 +73,12 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Year:        strings.TrimSpace(m.Year),
 			Rating:      strings.TrimSpace(m.Rating),
 			Genres:      trimAll(m.Genres),
+			Actors:      trimAll(m.Actors),
+			Directors:   trimAll(m.Directors),
+			Studios:     trimAll(m.Studios),
+			Runtime:     strings.TrimSpace(m.Runtime),
+			IMDbID:      strings.TrimSpace(m.IMDbID),
+			TMDbID:      strings.TrimSpace(m.TMDbID),
 			RawRootName: root,
 		}, nil
 
@@ -69,6 +88,11 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Title   string   `xml:"title"`
 			Plot    string   `xml:"plot"`
 			Genres  []string `xml:"genre"`
+			Actors  []string `xml:"actor>name"`
+			Studios []string `xml:"studio"`
+			Runtime string   `xml:"runtime"`
+			IMDbID  string   `xml:"id"`
+			TMDbID  string   `xml:"tmdbid"`
 		}
 
 		if err := xml.Unmarshal(data, &t); err != nil {
@@ -80,6 +104,11 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Title:       strings.TrimSpace(t.Title),
 			Plot:        strings.TrimSpace(t.Plot),
 			Genres:      trimAll(t.Genres),
+			Actors:      trimAll(t.Actors),
+			Studios:     trimAll(t.Studios),
+			Runtime:     strings.TrimSpace(t.Runtime),
+			IMDbID:      strings.TrimSpace(t.IMDbID),
+			TMDbID:      strings.TrimSpace(t.TMDbID),
 			RawRootName: root,
 		}, nil
 
@@ -92,6 +121,9 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Episode   string   `xml:"episode"`
 			ShowTitle string   `xml:"showtitle"`
 			Rating    string   `xml:"rating"`
+			Actors    []string `xml:"actor>name"`
+			Directors []string `xml:"director"`
+			Runtime   string   `xml:"runtime"`
 		}
 
 		if err := xml.Unmarshal(data, &e); err != nil {
@@ -106,6 +138,9 @@ func ParseNFOFile(path string) (*NFO, error) {
 			Episode:     strings.TrimSpace(e.Episode),
 			ShowTitle:   strings.TrimSpace(e.ShowTitle),
 			Rating:      strings.TrimSpace(e.Rating),
+			Actors:      trimAll(e.Actors),
+			Directors:   trimAll(e.Directors),
+			Runtime:     strings.TrimSpace(e.Runtime),
 			RawRootName: root,
 		}, nil
 

@@ -19,13 +19,14 @@ import (
 )
 
 type MediaItem struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	VideoPath string    `json:"videoPath"`
-	NFOPath   string    `json:"nfoPath,omitempty"`
-	Size      int64     `json:"size"`
-	Modified  time.Time `json:"modified"`
-	StableKey string    `json:"-"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	VideoPath  string    `json:"videoPath"`
+	NFOPath    string    `json:"nfoPath,omitempty"`
+	Size       int64     `json:"size"`
+	Modified   time.Time `json:"modified"`
+	StableKey  string    `json:"-"`
+	PosterPath string    `json:"posterPath,omitempty"`
 }
 
 type Library struct {
@@ -120,16 +121,13 @@ func NewLibrary(root string, store MediaStore, extensions []string) (*Library, e
 	}, nil
 }
 
-func (l *Library) ScanPath(path string) error {
-	targetPath, info, err := l.resolveScanPath(path)
-	if err != nil {
-		return err
-	}
-
+// performScan is the core scanning logic used by both Scan() and ScanPath()
+func (l *Library) performScan(targetPath string, isFullScan bool) error {
 	found := map[string]MediaItem{}
 	var scanErrs []error
 	var scanRunID string
 	canWrite := l.store != nil && !storeReadOnly(l.store)
+
 	if canWrite && l.rootID != "" {
 		run, err := l.store.StartScanRun(l.rootID, time.Now())
 		if err != nil {
@@ -139,166 +137,11 @@ func (l *Library) ScanPath(path string) error {
 		}
 	}
 
-	addFile := func(path string, info fs.FileInfo) {
-		ext := strings.ToLower(filepath.Ext(info.Name()))
-		if !l.allowedExtensions[ext] {
-			return
-		}
-
-		rawTitle := strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))
-		title := rawTitle
-		if parsedTitle, _, _, ok := parseEpisodeInfo(rawTitle); ok {
-			title = parsedTitle
-		}
-		nfo := guessNFOPath(path)
-
-		stableKey := stableID(path, info)
-		id := stableKey
-		if l.store != nil {
-			if existingID, ok, err := l.store.GetIDByPath(path); err != nil {
-				scanErrs = append(scanErrs, err)
-			} else if ok {
-				id = existingID
-			} else if !storeReadOnly(l.store) {
-				id = newUUID()
-			}
-		}
-
-		found[id] = MediaItem{
-			ID:        id,
-			Title:     title,
-			VideoPath: path,
-			NFOPath:   nfo,
-			Size:      info.Size(),
-			Modified:  info.ModTime(),
-			StableKey: stableKey,
-		}
-	}
-
-	if info.IsDir() {
-		err = filepath.WalkDir(targetPath, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				scanErrs = append(scanErrs, err)
-				return nil
-			}
-			if d.IsDir() {
-				return nil
-			}
-			info, err := d.Info()
-			if err != nil {
-				scanErrs = append(scanErrs, err)
-				return nil
-			}
-			addFile(path, info)
+	// Scan files
+	err := filepath.WalkDir(targetPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			scanErrs = append(scanErrs, err)
 			return nil
-		})
-		if err != nil {
-			scanErrs = append(scanErrs, err)
-		}
-	} else {
-		addFile(targetPath, info)
-	}
-
-	l.mu.Lock()
-	previous := l.items
-	lastScan := l.lastScan
-	updated := make(map[string]MediaItem, len(previous)+len(found))
-	previousWithin := make(map[string]MediaItem)
-	for id, item := range previous {
-		if pathWithin(targetPath, item.VideoPath) {
-			previousWithin[id] = item
-			continue
-		}
-		updated[id] = item
-	}
-	for id, item := range found {
-		updated[id] = item
-	}
-	l.items = updated
-	l.lastScan = time.Now()
-	l.mu.Unlock()
-
-	if l.store != nil {
-		idsToDelete := removedIDs(previousWithin, found)
-		if canWrite && len(idsToDelete) > 0 {
-			if err := l.store.DeleteItems(idsToDelete); err != nil {
-				scanErrs = append(scanErrs, err)
-			}
-		}
-		itemsToSave := diffItems(found, previousWithin, lastScan)
-		if canWrite && len(itemsToSave) > 0 {
-			if err := l.store.SaveItems(itemsToSave); err != nil {
-				scanErrs = append(scanErrs, err)
-			}
-		}
-		for _, item := range found {
-			if !canWrite {
-				break
-			}
-			if item.NFOPath == "" {
-				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
-					if err := l.store.SaveNFO(item.ID, fallback); err != nil {
-						scanErrs = append(scanErrs, err)
-					}
-					continue
-				}
-				if err := l.store.DeleteNFO(item.ID); err != nil {
-					scanErrs = append(scanErrs, err)
-				}
-				continue
-			}
-			nfo, err := ParseNFOFile(item.NFOPath)
-			if err != nil {
-				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", item.NFOPath, err)
-				continue
-			}
-			if err := l.store.SaveNFO(item.ID, nfo); err != nil {
-				scanErrs = append(scanErrs, err)
-			}
-		}
-	}
-
-	var scanErr error
-	if len(scanErrs) > 0 {
-		scanErr = errors.Join(scanErrs...)
-	}
-	if scanRunID != "" {
-		finishedAt := time.Now()
-		if scanErr != nil {
-			if err := l.store.FailScanRun(scanRunID, finishedAt, scanErr.Error()); err != nil {
-				scanErrs = append(scanErrs, err)
-				scanErr = errors.Join(scanErrs...)
-			}
-		} else {
-			if err := l.store.FinishScanRun(scanRunID, finishedAt); err != nil {
-				scanErrs = append(scanErrs, err)
-				scanErr = errors.Join(scanErrs...)
-			}
-		}
-	}
-	if scanErr != nil {
-		return scanErr
-	}
-	return nil
-}
-
-func (l *Library) Scan() error {
-	found := map[string]MediaItem{}
-	var scanErrs []error
-	var scanRunID string
-	canWrite := l.store != nil && !storeReadOnly(l.store)
-	if canWrite && l.rootID != "" {
-		run, err := l.store.StartScanRun(l.rootID, time.Now())
-		if err != nil {
-			scanErrs = append(scanErrs, err)
-		} else {
-			scanRunID = run.ID
-		}
-	}
-	err := filepath.WalkDir(l.root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			scanErrs = append(scanErrs, err)
-			return nil // skip unreadable entries
 		}
 		if d.IsDir() {
 			return nil
@@ -306,7 +149,6 @@ func (l *Library) Scan() error {
 
 		ext := strings.ToLower(filepath.Ext(d.Name()))
 		if !l.allowedExtensions[ext] {
-			// minimal: video types; mkv requested; others optional
 			return nil
 		}
 
@@ -350,21 +192,53 @@ func (l *Library) Scan() error {
 		scanErrs = append(scanErrs, err)
 	}
 
+	// Update library items with proper locking and deep copy to avoid race conditions
 	l.mu.Lock()
-	previous := l.items
+	previousCopy := make(map[string]MediaItem, len(l.items))
+	for k, v := range l.items {
+		previousCopy[k] = v
+	}
 	lastScan := l.lastScan
-	l.items = found
+
+	if isFullScan {
+		l.items = found
+	} else {
+		updated := make(map[string]MediaItem, len(l.items)+len(found))
+		for id, item := range l.items {
+			if !pathWithin(targetPath, item.VideoPath) {
+				updated[id] = item
+			}
+		}
+		for id, item := range found {
+			updated[id] = item
+		}
+		l.items = updated
+	}
 	l.lastScan = time.Now()
 	l.mu.Unlock()
 
+	// Determine which items to compare against
+	var previousForComparison map[string]MediaItem
+	if isFullScan {
+		previousForComparison = previousCopy
+	} else {
+		previousForComparison = make(map[string]MediaItem)
+		for id, item := range previousCopy {
+			if pathWithin(targetPath, item.VideoPath) {
+				previousForComparison[id] = item
+			}
+		}
+	}
+
+	// Persist changes to store
 	if l.store != nil {
-		idsToDelete := removedIDs(previous, found)
+		idsToDelete := removedIDs(previousForComparison, found)
 		if canWrite && len(idsToDelete) > 0 {
 			if err := l.store.DeleteItems(idsToDelete); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}
-		itemsToSave := diffItems(found, previous, lastScan)
+		itemsToSave := diffItems(found, previousForComparison, lastScan)
 		if canWrite && len(itemsToSave) > 0 {
 			if err := l.store.SaveItems(itemsToSave); err != nil {
 				scanErrs = append(scanErrs, err)
@@ -397,6 +271,7 @@ func (l *Library) Scan() error {
 		}
 	}
 
+	// Finalize scan run
 	var scanErr error
 	if len(scanErrs) > 0 {
 		scanErr = errors.Join(scanErrs...)
@@ -419,6 +294,18 @@ func (l *Library) Scan() error {
 		return scanErr
 	}
 	return nil
+}
+
+func (l *Library) ScanPath(path string) error {
+	targetPath, _, err := l.resolveScanPath(path)
+	if err != nil {
+		return err
+	}
+	return l.performScan(targetPath, false)
+}
+
+func (l *Library) Scan() error {
+	return l.performScan(l.root, true)
 }
 
 func (l *Library) resolveScanPath(path string) (string, fs.FileInfo, error) {
