@@ -178,15 +178,16 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 		}
 
 		stmt, err := tx.Prepare(`
-		INSERT INTO media_items (id, path, title, size, modified, nfo_path, stable_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO media_items (id, path, title, size, modified, nfo_path, stable_key, poster_path)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			path=excluded.path,
 			title=excluded.title,
 			size=excluded.size,
 			modified=excluded.modified,
 			nfo_path=excluded.nfo_path,
-			stable_key=excluded.stable_key
+			stable_key=excluded.stable_key,
+			poster_path=excluded.poster_path
 	`)
 		if err != nil {
 			rollback()
@@ -202,6 +203,7 @@ func (s *Store) SaveItems(items []server.MediaItem) (err error) {
 				item.Modified.Unix(),
 				nullString(item.NFOPath),
 				nullString(item.StableKey),
+				nullString(item.PosterPath),
 			)
 			if err != nil {
 				stmt.Close()
@@ -279,7 +281,7 @@ func (s *Store) GetAll() ([]server.MediaItem, error) {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, path, title, size, modified, nfo_path, stable_key
+		SELECT id, path, title, size, modified, nfo_path, stable_key, poster_path
 		FROM media_items
 		ORDER BY title
 	`)
@@ -291,25 +293,27 @@ func (s *Store) GetAll() ([]server.MediaItem, error) {
 	var items []server.MediaItem
 	for rows.Next() {
 		var (
-			id       string
-			path     string
-			title    sql.NullString
-			size     int64
-			modified int64
-			nfoPath  sql.NullString
-			stable   sql.NullString
+			id         string
+			path       string
+			title      sql.NullString
+			size       int64
+			modified   int64
+			nfoPath    sql.NullString
+			stable     sql.NullString
+			posterPath sql.NullString
 		)
-		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath, &stable); err != nil {
+		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath, &stable, &posterPath); err != nil {
 			return nil, err
 		}
 		items = append(items, server.MediaItem{
-			ID:        id,
-			VideoPath: path,
-			Title:     title.String,
-			Size:      size,
-			Modified:  time.Unix(modified, 0),
-			NFOPath:   nfoPath.String,
-			StableKey: stable.String,
+			ID:         id,
+			VideoPath:  path,
+			Title:      title.String,
+			Size:       size,
+			Modified:   time.Unix(modified, 0),
+			NFOPath:    nfoPath.String,
+			StableKey:  stable.String,
+			PosterPath: posterPath.String,
 		})
 	}
 
@@ -351,7 +355,7 @@ func (s *Store) GetAllLimited(limit, offset int, sortBy, query string) ([]server
 	args = append(args, limitValue, offset)
 
 	querySQL := fmt.Sprintf(`
-		SELECT id, path, title, size, modified, nfo_path, stable_key
+		SELECT id, path, title, size, modified, nfo_path, stable_key, poster_path
 		FROM media_items
 		%s
 		ORDER BY %s
@@ -367,25 +371,27 @@ func (s *Store) GetAllLimited(limit, offset int, sortBy, query string) ([]server
 	var items []server.MediaItem
 	for rows.Next() {
 		var (
-			id       string
-			path     string
-			title    sql.NullString
-			size     int64
-			modified int64
-			nfoPath  sql.NullString
-			stable   sql.NullString
+			id         string
+			path       string
+			title      sql.NullString
+			size       int64
+			modified   int64
+			nfoPath    sql.NullString
+			stable     sql.NullString
+			posterPath sql.NullString
 		)
-		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath, &stable); err != nil {
+		if err := rows.Scan(&id, &path, &title, &size, &modified, &nfoPath, &stable, &posterPath); err != nil {
 			return nil, err
 		}
 		items = append(items, server.MediaItem{
-			ID:        id,
-			VideoPath: path,
-			Title:     title.String,
-			Size:      size,
-			Modified:  time.Unix(modified, 0),
-			NFOPath:   nfoPath.String,
-			StableKey: stable.String,
+			ID:         id,
+			VideoPath:  path,
+			Title:      title.String,
+			Size:       size,
+			Modified:   time.Unix(modified, 0),
+			NFOPath:    nfoPath.String,
+			StableKey:  stable.String,
+			PosterPath: posterPath.String,
 		})
 	}
 
@@ -402,17 +408,19 @@ func (s *Store) GetByID(id string) (server.MediaItem, bool, error) {
 	}
 
 	var (
-		item     server.MediaItem
-		title    sql.NullString
-		modified int64
-		nfoPath  sql.NullString
+		item       server.MediaItem
+		title      sql.NullString
+		modified   int64
+		nfoPath    sql.NullString
+		stableKey  sql.NullString
+		posterPath sql.NullString
 	)
 
 	err := s.db.QueryRow(`
-		SELECT id, path, title, size, modified, nfo_path, stable_key
+		SELECT id, path, title, size, modified, nfo_path, stable_key, poster_path
 		FROM media_items
 		WHERE id = ?
-	`, id).Scan(&item.ID, &item.VideoPath, &title, &item.Size, &modified, &nfoPath, &item.StableKey)
+	`, id).Scan(&item.ID, &item.VideoPath, &title, &item.Size, &modified, &nfoPath, &stableKey, &posterPath)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return server.MediaItem{}, false, nil
@@ -420,9 +428,19 @@ func (s *Store) GetByID(id string) (server.MediaItem, bool, error) {
 		return server.MediaItem{}, false, err
 	}
 
-	item.Title = title.String
+	if title.Valid {
+		item.Title = title.String
+	}
 	item.Modified = time.Unix(modified, 0)
-	item.NFOPath = nfoPath.String
+	if nfoPath.Valid {
+		item.NFOPath = nfoPath.String
+	}
+	if stableKey.Valid {
+		item.StableKey = stableKey.String
+	}
+	if posterPath.Valid {
+		item.PosterPath = posterPath.String
+	}
 
 	return item, true, nil
 }
@@ -457,17 +475,22 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 	}
 
 	genres := strings.Join(nfo.Genres, ",")
+	actors := strings.Join(nfo.Actors, ",")
+	directors := strings.Join(nfo.Directors, ",")
+	studios := strings.Join(nfo.Studios, ",")
 	year := parseInt(nfo.Year)
 	rating := parseFloat(nfo.Rating)
 	season := parseInt(nfo.Season)
 	episode := parseInt(nfo.Episode)
+	runtime := parseInt(nfo.Runtime)
 
 	_, err := s.db.Exec(`
 		INSERT INTO nfo (
 			media_id, type, title, original_title, plot, year, rating,
-			genres, season, episode, show_title, raw_root
+			genres, season, episode, show_title, raw_root,
+			actors, directors, studios, runtime, imdb_id, tmdb_id
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(media_id) DO UPDATE SET
 			type=excluded.type,
 			title=excluded.title,
@@ -479,7 +502,13 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 			season=excluded.season,
 			episode=excluded.episode,
 			show_title=excluded.show_title,
-			raw_root=excluded.raw_root
+			raw_root=excluded.raw_root,
+			actors=excluded.actors,
+			directors=excluded.directors,
+			studios=excluded.studios,
+			runtime=excluded.runtime,
+			imdb_id=excluded.imdb_id,
+			tmdb_id=excluded.tmdb_id
 	`,
 		mediaID,
 		nullString(nfo.Type),
@@ -493,6 +522,12 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 		episode,
 		nullString(nfo.ShowTitle),
 		nullString(nfo.RawRootName),
+		nullString(actors),
+		nullString(directors),
+		nullString(studios),
+		runtime,
+		nullString(nfo.IMDbID),
+		nullString(nfo.TMDbID),
 	)
 	return err
 }
@@ -524,11 +559,18 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 		episode     sql.NullInt64
 		showTitle   sql.NullString
 		rawRootName sql.NullString
+		actors      sql.NullString
+		directors   sql.NullString
+		studios     sql.NullString
+		runtime     sql.NullInt64
+		imdbID      sql.NullString
+		tmdbID      sql.NullString
 	)
 
 	err := s.db.QueryRow(`
 		SELECT type, title, original_title, plot, year, rating, genres,
-			season, episode, show_title, raw_root
+			season, episode, show_title, raw_root,
+			actors, directors, studios, runtime, imdb_id, tmdb_id
 		FROM nfo
 		WHERE media_id = ?
 	`, mediaID).Scan(
@@ -543,6 +585,12 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 		&episode,
 		&showTitle,
 		&rawRootName,
+		&actors,
+		&directors,
+		&studios,
+		&runtime,
+		&imdbID,
+		&tmdbID,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -557,6 +605,8 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 	nfo.Plot = plot.String
 	nfo.ShowTitle = showTitle.String
 	nfo.RawRootName = rawRootName.String
+	nfo.IMDbID = imdbID.String
+	nfo.TMDbID = tmdbID.String
 
 	if year.Valid {
 		nfo.Year = strconv.FormatInt(year.Int64, 10)
@@ -570,9 +620,24 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 	if episode.Valid {
 		nfo.Episode = strconv.FormatInt(episode.Int64, 10)
 	}
+	if runtime.Valid {
+		nfo.Runtime = strconv.FormatInt(runtime.Int64, 10)
+	}
 	if genres.Valid {
 		parts := strings.Split(genres.String, ",")
 		nfo.Genres = trimGenres(parts)
+	}
+	if actors.Valid {
+		parts := strings.Split(actors.String, ",")
+		nfo.Actors = trimGenres(parts)
+	}
+	if directors.Valid {
+		parts := strings.Split(directors.String, ",")
+		nfo.Directors = trimGenres(parts)
+	}
+	if studios.Valid {
+		parts := strings.Split(studios.String, ",")
+		nfo.Studios = trimGenres(parts)
 	}
 
 	return &nfo, true, nil
@@ -722,4 +787,222 @@ func stableRootID(path, rootType string) string {
 func scanRunID(rootID string, startedAt time.Time) string {
 	sum := sha1.Sum([]byte(fmt.Sprintf("%s:%d", rootID, startedAt.UnixNano())))
 	return hex.EncodeToString(sum[:8])
+}
+
+// Verbesserung 2: Batch-Operations für Playback-State
+func (s *Store) GetAllPlaybackStates(clientID string, onlyUnfinished bool) ([]server.PlaybackState, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("storage: missing database connection")
+	}
+
+	query := `
+		SELECT media_id, position_seconds, duration_seconds, updated_at, last_played_at, percent_complete, client_id
+		FROM playback_state
+		WHERE 1=1
+	`
+	args := []any{}
+
+	normalizedClientID := strings.TrimSpace(clientID)
+	if normalizedClientID != "" {
+		query += " AND client_id = ?"
+		args = append(args, normalizedClientID)
+	}
+
+	if onlyUnfinished {
+		query += " AND (percent_complete IS NULL OR percent_complete < 90.0)"
+	}
+
+	query += " ORDER BY last_played_at DESC"
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var states []server.PlaybackState
+	for rows.Next() {
+		var state server.PlaybackState
+		var percentComplete sql.NullFloat64
+		if err := rows.Scan(
+			&state.MediaID,
+			&state.PositionSeconds,
+			&state.DurationSeconds,
+			&state.UpdatedAt,
+			&state.LastPlayedAt,
+			&percentComplete,
+			&state.ClientID,
+		); err != nil {
+			return nil, err
+		}
+		if percentComplete.Valid {
+			value := percentComplete.Float64
+			state.PercentComplete = &value
+		}
+		states = append(states, state)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return states, nil
+}
+
+// Verbesserung 4: Duplicate Detection
+func (s *Store) GetDuplicates() ([]server.DuplicateGroup, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("storage: missing database connection")
+	}
+
+	query := `
+		SELECT stable_key, GROUP_CONCAT(id, ',') as ids, COUNT(*) as count
+		FROM media_items
+		WHERE stable_key IS NOT NULL AND stable_key != ''
+		GROUP BY stable_key
+		HAVING count > 1
+		ORDER BY count DESC, stable_key
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []server.DuplicateGroup
+	for rows.Next() {
+		var stableKey string
+		var idsStr string
+		var count int
+		if err := rows.Scan(&stableKey, &idsStr, &count); err != nil {
+			return nil, err
+		}
+
+		ids := strings.Split(idsStr, ",")
+		items := make([]server.MediaItem, 0, len(ids))
+		for _, id := range ids {
+			item, ok, err := s.GetByID(id)
+			if err != nil {
+				return nil, err
+			}
+			if ok {
+				items = append(items, item)
+			}
+		}
+
+		if len(items) > 1 {
+			groups = append(groups, server.DuplicateGroup{
+				StableKey: stableKey,
+				Items:     items,
+				Count:     len(items),
+			})
+		}
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return groups, nil
+}
+
+// Verbesserung 5: Erweiterte Statistiken
+func (s *Store) GetDetailedStats() (*server.DetailedStats, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("storage: missing database connection")
+	}
+
+	stats := &server.DetailedStats{}
+
+	// Total items
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM media_items`).Scan(&stats.TotalItems); err != nil {
+		return nil, err
+	}
+
+	// Total size
+	if err := s.db.QueryRow(`SELECT COALESCE(SUM(size), 0) FROM media_items`).Scan(&stats.TotalSizeBytes); err != nil {
+		return nil, err
+	}
+
+	// Items by type
+	rows, err := s.db.Query(`
+		SELECT COALESCE(n.type, 'unknown') as type, COUNT(*) as count
+		FROM media_items m
+		LEFT JOIN nfo n ON m.id = n.media_id
+		GROUP BY n.type
+		ORDER BY count DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	stats.ItemsByType = make(map[string]int)
+	for rows.Next() {
+		var itemType string
+		var count int
+		if err := rows.Scan(&itemType, &count); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		stats.ItemsByType[itemType] = count
+	}
+	rows.Close()
+
+	// Items with/without NFO
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM media_items WHERE nfo_path IS NOT NULL AND nfo_path != ''`).Scan(&stats.ItemsWithNFO); err != nil {
+		return nil, err
+	}
+	stats.ItemsWithoutNFO = stats.TotalItems - stats.ItemsWithNFO
+
+	// Top 10 most watched
+	rows, err = s.db.Query(`
+		SELECT m.id, m.title, COUNT(DISTINCT p.client_id) as watch_count
+		FROM media_items m
+		INNER JOIN playback_state p ON m.id = p.media_id
+		GROUP BY m.id, m.title
+		ORDER BY watch_count DESC, m.title
+		LIMIT 10
+	`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var item server.TopItem
+		if err := rows.Scan(&item.ID, &item.Title, &item.WatchCount); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		stats.TopWatchedItems = append(stats.TopWatchedItems, item)
+	}
+	rows.Close()
+
+	// Recent scan runs
+	rows, err = s.db.Query(`
+		SELECT id, root_id, started_at, finished_at, status, error
+		FROM scan_runs
+		ORDER BY started_at DESC
+		LIMIT 10
+	`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var run server.ScanRun
+		var finishedAt sql.NullInt64
+		var errorMsg sql.NullString
+		var startedAtUnix int64
+		if err := rows.Scan(&run.ID, &run.RootID, &startedAtUnix, &finishedAt, &run.Status, &errorMsg); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		run.StartedAt = time.Unix(startedAtUnix, 0)
+		if finishedAt.Valid {
+			run.FinishedAt = time.Unix(finishedAt.Int64, 0)
+		}
+		run.Error = errorMsg.String
+		stats.RecentScans = append(stats.RecentScans, run)
+	}
+	rows.Close()
+
+	return stats, nil
 }
