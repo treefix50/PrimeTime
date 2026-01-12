@@ -100,18 +100,24 @@ func run() error {
 		}
 	}
 
+	if err := os.MkdirAll(*root, 0o755); err != nil {
+		log.Printf("level=error msg=\"failed to ensure media root\" path=%s err=%v", *root, err)
+		return err
+	}
+
 	store, err := storage.Open(*db, options)
 	if err != nil {
 		log.Printf("level=error msg=\"failed to open storage\" path=%s err=%v", *db, err)
 		return err
 	}
+	defer store.Close()
 
 	versionInfo := server.VersionInfo{
 		Version:   version,
 		Commit:    commit,
 		BuildDate: buildDate,
 	}
-	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, true, *readOnlyScan, extensionList)
+	s, err := server.New(*root, *addr, store, scanInterval, *noInitialScan, *cors, *jsonErrors, versionInfo, true, *readOnlyScan, extensionList, ff)
 	if err != nil {
 		log.Printf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 		return err
@@ -122,7 +128,6 @@ func run() error {
 		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 		<-ch
 		log.Println("level=info msg=\"shutting down\"")
-		_ = store.Close()
 		_ = s.Close()
 	}()
 

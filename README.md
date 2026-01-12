@@ -130,6 +130,59 @@ Statt `go run .` sollte unter Windows das Skript `./run.ps1` genutzt werden.
 (inklusive der benötigten `.dll`‑Dateien im selben Ordner).
 Anschließend wird `go run .` gestartet. ffmpeg wird **nicht** automatisch heruntergeladen.
 
+## Neue Features (2024)
+
+### Multi-User-Support
+PrimeTime unterstützt jetzt mehrere Benutzer mit getrennten Playback-States, Watched-Listen und Favorites.
+
+```bash
+# Benutzer erstellen
+curl -X POST http://localhost:8080/users -H "Content-Type: application/json" -d '{"name": "Max"}'
+
+# Alle Benutzer auflisten
+curl http://localhost:8080/users
+
+# Benutzer-Details
+curl http://localhost:8080/users/{userId}
+```
+
+### Transkodierungs-Profile
+Dynamische Video-Transkodierung mit verschiedenen Profilen (mobile, 720p, 1080p).
+
+```bash
+# Alle Profile anzeigen
+curl http://localhost:8080/transcoding/profiles
+
+# Stream mit Transkodierung
+curl "http://localhost:8080/items/{id}/stream?profile=mobile"
+
+# HLS-Stream (adaptive streaming)
+curl "http://localhost:8080/items/{id}/stream.m3u8?profile=720p"
+```
+
+### TV Shows/Serien-Verwaltung
+Hierarchische Organisation von Serien mit automatischer Episoden-Gruppierung.
+
+```bash
+# Episoden automatisch gruppieren (nach Scan)
+curl -X POST http://localhost:8080/shows
+
+# Alle Shows anzeigen
+curl http://localhost:8080/shows
+
+# Show-Details
+curl http://localhost:8080/shows/{showId}
+
+# Staffeln einer Show
+curl http://localhost:8080/shows/{showId}/seasons
+
+# Episoden einer Staffel
+curl http://localhost:8080/shows/{showId}/seasons/1/episodes
+
+# Nächste ungesehene Episode
+curl "http://localhost:8080/shows/{showId}/next-episode?userId={userId}"
+```
+
 ## Beispiele/Kommandos
 
 ```bash
