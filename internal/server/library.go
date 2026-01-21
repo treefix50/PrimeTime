@@ -250,12 +250,13 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 			}
 			if item.NFOPath == "" {
 				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
-					if err := l.store.SaveNFO(item.ID, fallback); err != nil {
+					// Use extended NFO save for complete metadata support
+					if err := l.store.SaveNFOExtended(item.ID, fallback); err != nil {
 						scanErrs = append(scanErrs, err)
 					}
 					continue
 				}
-				if err := l.store.DeleteNFO(item.ID); err != nil {
+				if err := l.store.DeleteNFOExtended(item.ID); err != nil {
 					scanErrs = append(scanErrs, err)
 				}
 				continue
@@ -265,7 +266,8 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", item.NFOPath, err)
 				continue
 			}
-			if err := l.store.SaveNFO(item.ID, nfo); err != nil {
+			// Use extended NFO save for complete metadata support (actors, stream details, etc.)
+			if err := l.store.SaveNFOExtended(item.ID, nfo); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}

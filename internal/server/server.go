@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/treefix50/primetime/internal/auth"
 )
 
 const (
@@ -43,6 +45,7 @@ type Server struct {
 	manualScanLimiter *RateLimiter
 	playbackLimiter   *RateLimiter
 	transcodingMgr    *TranscodingManager
+	authManager       *auth.Manager
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter) {
@@ -76,6 +79,15 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	cacheDir := filepath.Join(root, "..", "cache", "transcoding")
 	transcodingMgr := NewTranscodingManager(ffmpegPath, cacheDir, store)
 
+	// Initialize auth manager
+	var authMgr *auth.Manager
+	if store != nil {
+		// Type assert to auth.Store - the storage.Store implements all required methods
+		if authStore, ok := store.(auth.Store); ok {
+			authMgr = auth.NewManager(authStore, 24*time.Hour) // 24 hour sessions
+		}
+	}
+
 	s := &Server{
 		addr:              addr,
 		lib:               lib,
@@ -91,6 +103,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 		manualScanLimiter: NewRateLimiter(manualScanRateLimit),
 		playbackLimiter:   NewRateLimiter(playbackProgressMin),
 		transcodingMgr:    transcodingMgr,
+		authManager:       authMgr,
 	}
 
 	if s.scanInterval > 0 && (!s.readOnly || s.allowReadOnlyScan) {
@@ -107,6 +120,9 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	mux.HandleFunc("/library/scan", s.handleLibraryScan)
 	mux.HandleFunc("/library/duplicates", s.handleLibraryDuplicates)
 	mux.HandleFunc("/library/recent", s.handleLibraryRecent)
+	mux.HandleFunc("/library/roots", s.handleLibraryRoots)
+	mux.HandleFunc("/library/roots/", s.handleLibraryRootScan)
+	mux.HandleFunc("/library/type/", s.handleLibraryByType)
 	mux.HandleFunc("/playback", s.handlePlayback)
 	mux.HandleFunc("/favorites", s.handleFavorites)
 	mux.HandleFunc("/watched", s.handleWatched)
@@ -125,6 +141,19 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	// Verbesserung 3: TV Shows/Serien-Verwaltung
 	mux.HandleFunc("/shows", s.handleTVShows)
 	mux.HandleFunc("/shows/", s.handleTVShowDetail)
+
+	// Authentication endpoints
+	mux.HandleFunc("/auth/login", s.handleAuthLogin)
+	mux.HandleFunc("/auth/logout", s.handleAuthLogout)
+	mux.HandleFunc("/auth/session", s.handleAuthSession)
+	mux.HandleFunc("/auth/users", s.handleAuthUsers)
+	mux.HandleFunc("/auth/users/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/password") {
+			s.handleAuthUserPassword(w, r)
+		} else {
+			s.handleAuthUserDelete(w, r)
+		}
+	})
 
 	s.http = &http.Server{
 		Addr:              addr,
@@ -511,7 +540,8 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		}
 		if len(parts) == 2 {
 			if s.lib.store != nil {
-				nfo, ok, err := s.lib.store.GetNFO(item.ID)
+				// Use extended NFO retrieval for complete metadata
+				nfo, ok, err := s.lib.store.GetNFOExtended(item.ID)
 				if err != nil {
 					s.writeError(w, errInternal, http.StatusInternalServerError)
 					return

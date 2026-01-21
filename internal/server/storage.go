@@ -22,6 +22,10 @@ type MediaStore interface {
 	SaveNFO(mediaID string, nfo *NFO) error
 	DeleteNFO(mediaID string) error
 	GetNFO(mediaID string) (*NFO, bool, error)
+	// Extended NFO methods for complete metadata support
+	SaveNFOExtended(mediaID string, nfo *NFO) error
+	GetNFOExtended(mediaID string) (*NFO, bool, error)
+	DeleteNFOExtended(mediaID string) error
 	UpsertPlaybackState(mediaID string, positionSeconds, durationSeconds int64, lastPlayedAt int64, percentComplete *float64, clientID string) error
 	GetPlaybackState(mediaID, clientID string) (*PlaybackState, bool, error)
 	DeletePlaybackState(mediaID, clientID string) error
@@ -61,13 +65,22 @@ type MediaStore interface {
 	GetPosterPath(mediaID string) (string, bool, error)
 	SetPosterPath(mediaID, posterPath string) error
 
-	// Verbesserung 1: Multi-User-Support
-	CreateUser(id, name string, createdAt time.Time) error
-	GetUser(id string) (*User, bool, error)
-	GetUserByName(name string) (*User, bool, error)
+	// Multi-Root Support
+	GetItemsByRoots(rootIDs []string, limit, offset int, sortBy, query string) ([]MediaItem, error)
+
+	// NFO-based filtering and TV Show grouping
+	GetItemsByNFOType(nfoType string, limit, offset int, sortBy, query string) ([]MediaItem, error)
+	GetTVShowsGrouped(limit, offset int, sortBy, query string) ([]TVShowGroup, error)
+	GetSeasonsByShowTitle(showTitle string) ([]TVSeasonGroup, error)
+	GetEpisodesByShowAndSeason(showTitle string, seasonNumber int) ([]MediaItem, error)
+
+	// Verbesserung 1: Multi-User-Support (Media Users)
+	CreateMediaUser(id, name string, createdAt time.Time) error
+	GetMediaUser(id string) (*User, bool, error)
+	GetMediaUserByName(name string) (*User, bool, error)
 	GetAllUsers() ([]User, error)
 	UpdateUserLastActive(id string, lastActive time.Time) error
-	DeleteUser(id string) error
+	DeleteMediaUser(id string) error
 	SetUserPreference(userID, key, value string) error
 	GetUserPreference(userID, key string) (string, bool, error)
 	GetAllUserPreferences(userID string) (map[string]string, error)

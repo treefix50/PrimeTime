@@ -52,7 +52,7 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Check if user already exists
-		existing, ok, err := s.lib.store.GetUserByName(payload.Name)
+		existing, ok, err := s.lib.store.GetMediaUserByName(payload.Name)
 		if err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
@@ -63,12 +63,12 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		id := generateUserID(payload.Name)
-		if err := s.lib.store.CreateUser(id, payload.Name, time.Now()); err != nil {
+		if err := s.lib.store.CreateMediaUser(id, payload.Name, time.Now()); err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
 		}
 
-		user, ok, err := s.lib.store.GetUser(id)
+		user, ok, err := s.lib.store.GetMediaUser(id)
 		if err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
@@ -104,7 +104,7 @@ func (s *Server) handleUserDetail(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		user, ok, err := s.lib.store.GetUser(userID)
+		user, ok, err := s.lib.store.GetMediaUser(userID)
 		if err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
@@ -127,7 +127,7 @@ func (s *Server) handleUserDetail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := s.lib.store.DeleteUser(userID); err != nil {
+		if err := s.lib.store.DeleteMediaUser(userID); err != nil {
 			s.writeError(w, errInternal, http.StatusInternalServerError)
 			return
 		}
@@ -345,6 +345,12 @@ func (s *Server) handleTVShowDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if action == "seasons" {
+		// Check if it's /shows/{id}/seasons/{season}/episodes
+		if len(parts) >= 4 && parts[2] != "" && parts[3] == "episodes" {
+			s.handleSeasonEpisodes(w, r, showID, parts[2])
+			return
+		}
+
 		// /shows/{id}/seasons
 		if r.Method != http.MethodGet {
 			s.methodNotAllowed(w)
@@ -416,27 +422,10 @@ func (s *Server) handleTVShowDetail(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleSeasonDetail(w http.ResponseWriter, r *http.Request) {
-	if s.handleOptions(w, r, "GET, OPTIONS") {
+func (s *Server) handleSeasonEpisodes(w http.ResponseWriter, r *http.Request, showID, seasonNumStr string) {
+	if r.Method != http.MethodGet {
+		s.methodNotAllowed(w)
 		return
-	}
-	if s.lib.store == nil {
-		s.writeError(w, "not available without database", http.StatusNotImplemented)
-		return
-	}
-
-	path := strings.TrimPrefix(r.URL.Path, "/shows/")
-	parts := strings.Split(path, "/")
-	if len(parts) < 4 || parts[0] == "" || parts[1] != "seasons" || parts[2] == "" {
-		s.writeError(w, errNotFound, http.StatusNotFound)
-		return
-	}
-
-	showID := parts[0]
-	seasonNumStr := parts[2]
-	action := ""
-	if len(parts) >= 4 {
-		action = parts[3]
 	}
 
 	seasonNum, err := strconv.Atoi(seasonNumStr)
@@ -452,41 +441,25 @@ func (s *Server) handleSeasonDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var season *Season
-	for _, s := range seasons {
-		if s.SeasonNumber == seasonNum {
-			season = &s
+	var seasonID string
+	for _, season := range seasons {
+		if season.SeasonNumber == seasonNum {
+			seasonID = season.ID
 			break
 		}
 	}
 
-	if season == nil {
+	if seasonID == "" {
 		s.writeError(w, errNotFound, http.StatusNotFound)
 		return
 	}
 
-	if action == "episodes" {
-		// /shows/{id}/seasons/{season}/episodes
-		if r.Method != http.MethodGet {
-			s.methodNotAllowed(w)
-			return
-		}
-
-		episodes, err := s.lib.store.GetEpisodesBySeason(season.ID)
-		if err != nil {
-			s.writeError(w, errInternal, http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, r, episodes)
+	episodes, err := s.lib.store.GetEpisodesBySeason(seasonID)
+	if err != nil {
+		s.writeError(w, errInternal, http.StatusInternalServerError)
 		return
 	}
-
-	// /shows/{id}/seasons/{season}
-	if r.Method != http.MethodGet {
-		s.methodNotAllowed(w)
-		return
-	}
-	writeJSON(w, r, season)
+	writeJSON(w, r, episodes)
 }
 
 // Helper functions
