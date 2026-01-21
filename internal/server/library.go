@@ -283,6 +283,11 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 				scanErrs = append(scanErrs, err)
 			}
 		}
+		if canWrite {
+			if err := l.store.AutoGroupEpisodes(); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
 	}
 
 	// Finalize scan run
@@ -658,6 +663,7 @@ func fallbackNFOFromFilename(videoPath string) (*NFO, bool) {
 	return &NFO{
 		Type:        "episode",
 		Title:       title,
+		ShowTitle:   title,
 		Season:      season,
 		Episode:     episode,
 		RawRootName: "filename",
