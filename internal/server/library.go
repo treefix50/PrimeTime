@@ -163,7 +163,7 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 		if parsedTitle, _, _, ok := parseEpisodeInfo(rawTitle); ok {
 			title = parsedTitle
 		}
-		nfo := guessNFOPath(path)
+		nfo, _ := findNFOPaths(path)
 
 		stableKey := stableID(path, info)
 		id := stableKey
@@ -248,10 +248,17 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 			if !canWrite {
 				break
 			}
-			if item.NFOPath == "" {
+			itemNFO, showNFO := findNFOPaths(item.VideoPath)
+			if itemNFO == "" {
 				if fallback, ok := fallbackNFOFromFilename(item.VideoPath); ok {
+					merged := fallback
+					if showNFO != "" {
+						if show, err := ParseNFOFile(showNFO); err == nil {
+							merged = mergeEpisodeWithShow(merged, show)
+						}
+					}
 					// Use extended NFO save for complete metadata support
-					if err := l.store.SaveNFOExtended(item.ID, fallback); err != nil {
+					if err := l.store.SaveNFOExtended(item.ID, merged); err != nil {
 						scanErrs = append(scanErrs, err)
 					}
 					continue
@@ -261,13 +268,24 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 				}
 				continue
 			}
-			nfo, err := ParseNFOFile(item.NFOPath)
+			nfo, err := ParseNFOFile(itemNFO)
 			if err != nil {
-				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", item.NFOPath, err)
+				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", itemNFO, err)
 				continue
+			}
+			nfo = fillEpisodeFromPath(nfo, item.VideoPath)
+			if nfo.Type == "episode" && showNFO != "" {
+				if show, err := ParseNFOFile(showNFO); err == nil {
+					nfo = mergeEpisodeWithShow(nfo, show)
+				}
 			}
 			// Use extended NFO save for complete metadata support (actors, stream details, etc.)
 			if err := l.store.SaveNFOExtended(item.ID, nfo); err != nil {
+				scanErrs = append(scanErrs, err)
+			}
+		}
+		if canWrite {
+			if err := l.store.AutoGroupEpisodes(); err != nil {
 				scanErrs = append(scanErrs, err)
 			}
 		}
@@ -507,13 +525,102 @@ func mediaItemEqual(a, b MediaItem) bool {
 		a.StableKey == b.StableKey
 }
 
-func guessNFOPath(videoPath string) string {
+func findNFOPaths(videoPath string) (string, string) {
 	base := strings.TrimSuffix(videoPath, filepath.Ext(videoPath))
-	nfo := base + ".nfo"
-	if _, err := os.Stat(nfo); err == nil {
-		return nfo
+	dir := filepath.Dir(videoPath)
+	filename := filepath.Base(base)
+
+	itemCandidates := []string{
+		base + ".nfo",
+		filepath.Join(dir, "movie.nfo"),
+		filepath.Join(dir, "index.nfo"),
+		filepath.Join(dir, filepath.Base(dir)+".nfo"),
+	}
+	itemNFO := firstExistingPath(itemCandidates)
+	showNFO := ""
+
+	if title, _, _, ok := parseEpisodeInfo(filename); ok {
+		showCandidates := []string{
+			filepath.Join(dir, "tvshow.nfo"),
+			filepath.Join(dir, title+".nfo"),
+		}
+		showNFO = firstExistingPath(showCandidates)
+	}
+
+	return itemNFO, showNFO
+}
+
+func firstExistingPath(paths []string) string {
+	for _, candidate := range paths {
+		if candidate == "" {
+			continue
+		}
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
 	}
 	return ""
+}
+
+func mergeEpisodeWithShow(episode *NFO, show *NFO) *NFO {
+	if episode == nil {
+		return show
+	}
+	if show == nil || show.Type != "tvshow" {
+		return episode
+	}
+	if episode.ShowTitle == "" {
+		episode.ShowTitle = show.Title
+	}
+	if episode.Genres == nil || len(episode.Genres) == 0 {
+		episode.Genres = show.Genres
+	}
+	if episode.Studios == nil || len(episode.Studios) == 0 {
+		episode.Studios = show.Studios
+	}
+	if episode.Actors == nil || len(episode.Actors) == 0 {
+		episode.Actors = show.Actors
+	}
+	if episode.Directors == nil || len(episode.Directors) == 0 {
+		episode.Directors = show.Directors
+	}
+	if episode.MPAA == "" {
+		episode.MPAA = show.MPAA
+	}
+	if episode.UniqueIDs == nil || len(episode.UniqueIDs) == 0 {
+		episode.UniqueIDs = show.UniqueIDs
+	}
+	if episode.IMDbID == "" {
+		episode.IMDbID = show.IMDbID
+	}
+	if episode.TMDbID == "" {
+		episode.TMDbID = show.TMDbID
+	}
+	if episode.TVDbID == "" {
+		episode.TVDbID = show.TVDbID
+	}
+	return episode
+}
+
+func fillEpisodeFromPath(episode *NFO, videoPath string) *NFO {
+	if episode == nil || episode.Type != "episode" {
+		return episode
+	}
+	base := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
+	title, season, episodeNum, ok := parseEpisodeInfo(base)
+	if !ok {
+		return episode
+	}
+	if episode.ShowTitle == "" {
+		episode.ShowTitle = title
+	}
+	if episode.Season == "" {
+		episode.Season = season
+	}
+	if episode.Episode == "" {
+		episode.Episode = episodeNum
+	}
+	return episode
 }
 
 var episodePatterns = []*regexp.Regexp{
@@ -578,6 +685,7 @@ func fallbackNFOFromFilename(videoPath string) (*NFO, bool) {
 	return &NFO{
 		Type:        "episode",
 		Title:       title,
+		ShowTitle:   title,
 		Season:      season,
 		Episode:     episode,
 		RawRootName: "filename",
