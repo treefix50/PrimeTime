@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/treefix50/primetime/internal/auth"
 	"github.com/treefix50/primetime/internal/ffmpeg"
 	"github.com/treefix50/primetime/internal/server"
 	"github.com/treefix50/primetime/internal/storage"
@@ -112,6 +113,25 @@ func run() error {
 	}
 	defer store.Close()
 
+	// Initialize admin user if this is the first run
+	if !*dbReadOnly {
+		// storage.Store implements auth.Store interface
+		authMgr := auth.NewManager(store, 24*time.Hour)
+		adminPassword, err := authMgr.InitializeAdmin()
+		if err != nil {
+			log.Printf("level=error msg=\"failed to initialize admin user\" err=%v", err)
+			return err
+		}
+		if adminPassword != "" {
+			log.Printf("level=info msg=\"========================================\"")
+			log.Printf("level=info msg=\"FIRST RUN: Admin user created\"")
+			log.Printf("level=info msg=\"Username: admin\"")
+			log.Printf("level=info msg=\"Password: %s\"", adminPassword)
+			log.Printf("level=info msg=\"IMPORTANT: Save this password securely!\"")
+			log.Printf("level=info msg=\"========================================\"")
+		}
+	}
+
 	versionInfo := server.VersionInfo{
 		Version:   version,
 		Commit:    commit,
@@ -121,6 +141,16 @@ func run() error {
 	if err != nil {
 		log.Printf("level=error msg=\"failed to initialize server\" addr=%s root=%s err=%v", *addr, *root, err)
 		return err
+	}
+
+	// Auto-group TV show episodes on startup (if database is available and writable)
+	if store != nil && !*dbReadOnly {
+		log.Printf("level=info msg=\"auto-grouping TV show episodes\"")
+		if err := store.AutoGroupEpisodes(); err != nil {
+			log.Printf("level=warn msg=\"failed to auto-group episodes\" err=%v", err)
+		} else {
+			log.Printf("level=info msg=\"TV show episodes grouped successfully\"")
+		}
 	}
 
 	go func() {
