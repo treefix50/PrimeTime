@@ -273,7 +273,6 @@ func (l *Library) performScan(targetPath string, isFullScan bool) error {
 				log.Printf("level=warn msg=\"nfo parse failed\" path=%s err=%v", itemNFO, err)
 				continue
 			}
-			nfo = fillEpisodeFromPath(nfo, item.VideoPath)
 			if nfo.Type == "episode" && showNFO != "" {
 				if show, err := ParseNFOFile(showNFO); err == nil {
 					nfo = mergeEpisodeWithShow(nfo, show)
@@ -598,27 +597,6 @@ func mergeEpisodeWithShow(episode *NFO, show *NFO) *NFO {
 	}
 	if episode.TVDbID == "" {
 		episode.TVDbID = show.TVDbID
-	}
-	return episode
-}
-
-func fillEpisodeFromPath(episode *NFO, videoPath string) *NFO {
-	if episode == nil || episode.Type != "episode" {
-		return episode
-	}
-	base := strings.TrimSuffix(filepath.Base(videoPath), filepath.Ext(videoPath))
-	title, season, episodeNum, ok := parseEpisodeInfo(base)
-	if !ok {
-		return episode
-	}
-	if episode.ShowTitle == "" {
-		episode.ShowTitle = title
-	}
-	if episode.Season == "" {
-		episode.Season = season
-	}
-	if episode.Episode == "" {
-		episode.Episode = episodeNum
 	}
 	return episode
 }
