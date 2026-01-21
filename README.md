@@ -2,7 +2,21 @@
 
 PrimeTime ist ein minimalistischer Media-Server in Go.
 Er stellt Video-Dateien (.mkv, .mp4, .m2ts) und optionale Metadaten (.nfo) sowie Untertitel (.srt/.vtt) über HTTP bereit.
-Es gibt kein Web-Interface und keine Authentifizierung.
+Es gibt kein Web-Interface - der Fokus liegt auf einer sauberen REST API für separate Clients.
+
+## ✨ Features
+
+- 🎬 **Video-Streaming** mit Range-Request-Support
+- 📝 **NFO-Metadaten** (Kodi-kompatibel)
+- 🔐 **Authentication** mit Admin/User-Verwaltung
+- 👥 **Multi-User-Support** mit separaten Watch-Histories
+- 🎞️ **Transcoding** mit vordefinierten Profilen
+- 📺 **TV Shows** mit automatischer Episoden-Gruppierung
+- 📁 **Multi-Root** für mehrere Media-Verzeichnisse
+- ⭐ **Favorites & Collections** (Playlists)
+- 🔍 **Erweiterte Suche** (Genre, Jahr, Rating)
+- 🚀 **Minimalistisch** - keine Plugins, kein LiveTV, kein UI
+=======
 
 ## HTTP-Caching (ETag)
 
@@ -34,7 +48,7 @@ Gefundene Werte werden als `title`, `season`, `episode` im JSON von `/items/{id}
 
 ## Voraussetzungen
 
-* **Go 1.22** muss installiert sein (entspricht `go.mod`).
+* **Go 1.24** muss installiert sein (entspricht `go.mod`).
 * **ffmpeg** muss lokal vorhanden sein und manuell unter `./tools/ffmpeg` abgelegt werden.
   * Der Ordner `tools/ffmpeg` ist im ZIP bereits vorhanden (leer), damit die Dateien direkt dort abgelegt werden können.
   * **Windows (FFmpeg-Builds ZIP, Ordner enthält `bin/`, `lib/`, `include/`)**:
@@ -47,12 +61,126 @@ Gefundene Werte werden als `title`, `season`, `episode` im JSON von `/items/{id}
   * Es gibt **keinen** Auto-Download mehr; ohne diese Dateien startet PrimeTime nicht.
 * `./media` existiert oder wird beim Start erzeugt. Optional wird eine SQLite-DB unter `./data/primetime.db` angelegt.
 
-## Start
+## Schnellstart
 
-### Windows (PowerShell)
+### 1. FFmpeg installieren
+Lade FFmpeg herunter und kopiere die Binaries nach `tools/ffmpeg/`:
+- Windows: `ffmpeg.exe`, `ffprobe.exe` + alle DLLs
+- Linux/macOS: `ffmpeg`, `ffprobe`
 
+### 2. Server starten
+
+**Erster Start (Admin-Passwort wird angezeigt):**
 ```bash
-./run.ps1 -root ./media -addr :8080 -db ./data/primetime.db
+go run . -root ./media -addr :8080 -db ./data/primetime.db
+```
+
+**Ausgabe:**
+```
+level=info msg="========================================"
+level=info msg="FIRST RUN: Admin user created"
+level=info msg="Username: admin"
+level=info msg="Password: Abc123XyZ789"
+level=info msg="IMPORTANT: Save this password securely!"
+level=info msg="========================================"
+level=info msg="server listening" addr=:8080
+```
+
+⚠️ **Speichere das Admin-Passwort!** Es wird nur einmal angezeigt.
+
+### 3. API testen
+
+**Login:**
+```bash
+curl -X POST http://localhost:8080/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Abc123XyZ789"}'
+```
+
+**Library abrufen:**
+```bash
+curl http://localhost:8080/library \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## Dokumentation
+
+- 📖 [AUTHENTICATION.md](AUTHENTICATION.md) - Authentifizierungs-System und Benutzerverwaltung
+
+## API Endpoints
+
+### Authentication
+```
+POST   /auth/login                    - Login
+POST   /auth/logout                   - Logout
+GET    /auth/session                  - Session validieren
+GET    /auth/users                    - Benutzer auflisten (Admin)
+POST   /auth/users                    - Benutzer erstellen (Admin)
+POST   /auth/users/{id}/password      - Passwort ändern
+DELETE /auth/users/{id}               - Benutzer löschen (Admin)
+```
+
+### Media Library
+```
+GET    /library                       - Alle Medien
+POST   /library                       - Rescan
+GET    /library/recent                - Kürzlich hinzugefügt
+GET    /library/duplicates            - Duplikate finden
+GET    /items/{id}                    - Media-Details
+GET    /items/{id}/stream             - Video-Stream
+GET    /items/{id}/stream?profile=X   - Transkodierter Stream
+GET    /items/{id}/nfo                - Metadaten
+GET    /items/{id}/poster             - Poster-Bild
+```
+
+### Multi-User
+```
+GET    /users                         - Alle Benutzer
+POST   /users                         - Benutzer erstellen
+GET    /users/{id}                    - Benutzer-Details
+DELETE /users/{id}                    - Benutzer löschen
+```
+
+### TV Shows
+```
+POST   /shows                         - Auto-Gruppierung
+GET    /shows                         - Alle Serien
+GET    /shows/{id}/seasons            - Staffeln
+GET    /shows/{id}/next-episode       - Nächste Episode
+```
+
+### Transcoding
+```
+GET    /transcoding/profiles          - Alle Profile
+POST   /transcoding/profiles          - Profil erstellen
+```
+
+### Multi-Root
+```
+GET    /library/roots                 - Alle Roots
+POST   /library/roots                 - Root hinzufügen
+POST   /library/roots/{id}/scan       - Root scannen
+```
+
+## CLI-Optionen
+
+### Produktivbetrieb
+
+**Kompilierte Binary erstellen:**
+```bash
+go build -o primetime_server.exe .
+```
+
+**Server starten:**
+```bash
+primetime_server.exe -root ./media -addr :8080 -db ./data/primetime.db
+```
+
+### Entwicklung
+
+**Mit Go direkt:**
+```bash
+go run . -root ./media -addr :8080 -db ./data/primetime.db
 ```
 
 Erwartete Struktur nach dem manuellen Kopieren (Windows-Beispiel):
@@ -125,62 +253,36 @@ Beim Öffnen der Datenbank setzt PrimeTime folgende pragmatische Defaults:
 Die Werte sind auf einen ausgewogenen Mix aus Performance und Sicherheit ausgelegt und können bei Bedarf
 an die lokale Hardware oder sehr große Bibliotheken angepasst werden.
 
-Statt `go run .` sollte unter Windows das Skript `./run.ps1` genutzt werden.
-`run.ps1` prüft zuerst, ob `tools/ffmpeg/ffmpeg.exe` und `tools/ffmpeg/ffprobe.exe` vorhanden und ausführbar sind
-(inklusive der benötigten `.dll`‑Dateien im selben Ordner).
-Anschließend wird `go run .` gestartet. ffmpeg wird **nicht** automatisch heruntergeladen.
+**Wichtig:** FFmpeg muss manuell unter `tools/ffmpeg/` installiert werden. Es gibt keinen automatischen Download.
 
-## Neue Features (2024)
+## Erweiterte Features
 
-### Multi-User-Support
-PrimeTime unterstützt jetzt mehrere Benutzer mit getrennten Playback-States, Watched-Listen und Favorites.
-
+### Collections & Favorites
 ```bash
-# Benutzer erstellen
-curl -X POST http://localhost:8080/users -H "Content-Type: application/json" -d '{"name": "Max"}'
+# Collection erstellen
+curl -X POST http://localhost:8080/collections \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Meine Favoriten", "description": "Beste Filme"}'
 
-# Alle Benutzer auflisten
-curl http://localhost:8080/users
-
-# Benutzer-Details
-curl http://localhost:8080/users/{userId}
+# Zu Favoriten hinzufügen
+curl -X POST http://localhost:8080/favorites/{mediaId} \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
-### Transkodierungs-Profile
-Dynamische Video-Transkodierung mit verschiedenen Profilen (mobile, 720p, 1080p).
-
+### Erweiterte Suche
 ```bash
-# Alle Profile anzeigen
-curl http://localhost:8080/transcoding/profiles
+# Nach Genre suchen
+curl "http://localhost:8080/library?genre=Action" \
+  -H "Authorization: Bearer YOUR_TOKEN"
 
-# Stream mit Transkodierung
-curl "http://localhost:8080/items/{id}/stream?profile=mobile"
+# Nach Jahr filtern
+curl "http://localhost:8080/library?year=2020" \
+  -H "Authorization: Bearer YOUR_TOKEN"
 
-# HLS-Stream (adaptive streaming)
-curl "http://localhost:8080/items/{id}/stream.m3u8?profile=720p"
-```
-
-### TV Shows/Serien-Verwaltung
-Hierarchische Organisation von Serien mit automatischer Episoden-Gruppierung.
-
-```bash
-# Episoden automatisch gruppieren (nach Scan)
-curl -X POST http://localhost:8080/shows
-
-# Alle Shows anzeigen
-curl http://localhost:8080/shows
-
-# Show-Details
-curl http://localhost:8080/shows/{showId}
-
-# Staffeln einer Show
-curl http://localhost:8080/shows/{showId}/seasons
-
-# Episoden einer Staffel
-curl http://localhost:8080/shows/{showId}/seasons/1/episodes
-
-# Nächste ungesehene Episode
-curl "http://localhost:8080/shows/{showId}/next-episode?userId={userId}"
+# Nach Rating filtern
+curl "http://localhost:8080/library?minRating=8.0" \
+  -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
 ## Beispiele/Kommandos
