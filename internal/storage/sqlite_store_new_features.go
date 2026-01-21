@@ -15,7 +15,7 @@ import (
 // Verbesserung 1: Multi-User-Support
 // ============================================================================
 
-func (s *Store) CreateUser(id, name string, createdAt time.Time) error {
+func (s *Store) CreateMediaUser(id, name string, createdAt time.Time) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
 	}
@@ -26,7 +26,7 @@ func (s *Store) CreateUser(id, name string, createdAt time.Time) error {
 	return err
 }
 
-func (s *Store) GetUser(id string) (*server.User, bool, error) {
+func (s *Store) GetMediaUser(id string) (*server.User, bool, error) {
 	if s == nil || s.db == nil {
 		return nil, false, fmt.Errorf("storage: missing database connection")
 	}
@@ -52,7 +52,7 @@ func (s *Store) GetUser(id string) (*server.User, bool, error) {
 	return &user, true, nil
 }
 
-func (s *Store) GetUserByName(name string) (*server.User, bool, error) {
+func (s *Store) GetMediaUserByName(name string) (*server.User, bool, error) {
 	if s == nil || s.db == nil {
 		return nil, false, fmt.Errorf("storage: missing database connection")
 	}
@@ -122,7 +122,7 @@ func (s *Store) UpdateUserLastActive(id string, lastActive time.Time) error {
 	return err
 }
 
-func (s *Store) DeleteUser(id string) error {
+func (s *Store) DeleteMediaUser(id string) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("storage: missing database connection")
 	}

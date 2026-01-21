@@ -475,7 +475,16 @@ func (s *Store) SaveNFO(mediaID string, nfo *server.NFO) error {
 	}
 
 	genres := strings.Join(nfo.Genres, ",")
-	actors := strings.Join(nfo.Actors, ",")
+
+	// Convert Actor structs to comma-separated names
+	actorNames := make([]string, 0, len(nfo.Actors))
+	for _, actor := range nfo.Actors {
+		if actor.Name != "" {
+			actorNames = append(actorNames, actor.Name)
+		}
+	}
+	actors := strings.Join(actorNames, ",")
+
 	directors := strings.Join(nfo.Directors, ",")
 	studios := strings.Join(nfo.Studios, ",")
 	year := parseInt(nfo.Year)
@@ -629,7 +638,12 @@ func (s *Store) GetNFO(mediaID string) (*server.NFO, bool, error) {
 	}
 	if actors.Valid {
 		parts := strings.Split(actors.String, ",")
-		nfo.Actors = trimGenres(parts)
+		actorNames := trimGenres(parts)
+		// Convert actor names back to Actor structs
+		nfo.Actors = make([]server.Actor, 0, len(actorNames))
+		for _, name := range actorNames {
+			nfo.Actors = append(nfo.Actors, server.Actor{Name: name})
+		}
 	}
 	if directors.Valid {
 		parts := strings.Split(directors.String, ",")
