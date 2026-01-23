@@ -577,8 +577,16 @@ func (s *Server) handleTranscodingJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return all active jobs (simplified - in production, store jobs in DB)
-	writeJSON(w, r, map[string]string{
-		"message": "transcoding jobs endpoint - implementation pending",
-	})
+	jobID := strings.TrimSpace(r.URL.Query().Get("id"))
+	if jobID != "" {
+		job, ok := s.transcodingMgr.GetJob(jobID)
+		if !ok {
+			s.writeError(w, errNotFound, http.StatusNotFound)
+			return
+		}
+		writeJSON(w, r, summarizeJob(job))
+		return
+	}
+
+	writeJSON(w, r, s.transcodingMgr.ListJobs())
 }

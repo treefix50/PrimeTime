@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -260,16 +261,54 @@ func GetVideoInfo(ctx context.Context, ffprobePath, videoPath string) (*VideoInf
 		return nil, fmt.Errorf("ffprobe failed: %w", err)
 	}
 
-	// Parse JSON output (simplified - in production use encoding/json)
+	var probe struct {
+		Format struct {
+			Duration string `json:"duration"`
+			BitRate  string `json:"bit_rate"`
+		} `json:"format"`
+		Streams []struct {
+			CodecType string `json:"codec_type"`
+			CodecName string `json:"codec_name"`
+			Width     int    `json:"width"`
+			Height    int    `json:"height"`
+			BitRate   string `json:"bit_rate"`
+		} `json:"streams"`
+	}
+	if err := json.Unmarshal(output, &probe); err != nil {
+		return nil, fmt.Errorf("ffprobe json parse failed: %w", err)
+	}
+
 	info := &VideoInfo{
 		Path: videoPath,
 	}
 
-	// Extract duration from output (simplified parsing)
-	outputStr := string(output)
-	if strings.Contains(outputStr, "duration") {
-		// This is a simplified version - proper implementation should use JSON parsing
-		info.Duration = 0 // TODO: Parse JSON properly
+	if probe.Format.Duration != "" {
+		if duration, err := strconv.ParseFloat(probe.Format.Duration, 64); err == nil {
+			info.Duration = duration
+		}
+	}
+	if probe.Format.BitRate != "" {
+		if bitrate, err := strconv.ParseInt(probe.Format.BitRate, 10, 64); err == nil {
+			info.Bitrate = bitrate
+		}
+	}
+
+	for _, stream := range probe.Streams {
+		if stream.CodecType == "video" {
+			info.Codec = stream.CodecName
+			if stream.Width > 0 {
+				info.Width = stream.Width
+			}
+			if stream.Height > 0 {
+				info.Height = stream.Height
+			}
+			if stream.BitRate != "" {
+				if bitrate, err := strconv.ParseInt(stream.BitRate, 10, 64); err == nil {
+					info.Bitrate = bitrate
+				}
+			}
+			break
+		}
 	}
 
 	return info, nil
