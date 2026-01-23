@@ -166,7 +166,11 @@ func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem
 
 	// Save to cache
 	if tm.store != nil {
-		fileInfo, _ := os.Stat(outputPath)
+		fileInfo, err := os.Stat(outputPath)
+		if err != nil {
+			_ = tm.store.DeleteTranscodingCache(job.ID)
+			return
+		}
 		cache := TranscodingCache{
 			ID:           job.ID,
 			MediaID:      job.MediaID,
