@@ -166,10 +166,7 @@ func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem
 
 	// Save to cache
 	if tm.store != nil {
-		var sizeBytes int64
-		if fileInfo, err := os.Stat(outputPath); err == nil {
-			sizeBytes = fileInfo.Size()
-		}
+		fileInfo, _ := os.Stat(outputPath)
 		cache := TranscodingCache{
 			ID:           job.ID,
 			MediaID:      job.MediaID,
@@ -177,7 +174,7 @@ func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem
 			CachePath:    outputPath,
 			CreatedAt:    time.Now(),
 			LastAccessed: time.Now(),
-			SizeBytes:    sizeBytes,
+			SizeBytes:    fileInfo.Size(),
 		}
 		_ = tm.store.SaveTranscodingCache(cache)
 	}
@@ -391,32 +388,16 @@ func (tm *TranscodingManager) ServeTranscodedFile(w http.ResponseWriter, r *http
 		return
 	}
 
-	start := int64(0)
+	start, err := strconv.ParseInt(ranges[0], 10, 64)
+	if err != nil {
+		http.Error(w, "invalid range", http.StatusRequestedRangeNotSatisfiable)
+		return
+	}
+
 	end := fileInfo.Size() - 1
-
-	if ranges[0] == "" {
-		// Suffix range: bytes=-500
-		suffixLen, err := strconv.ParseInt(ranges[1], 10, 64)
-		if err != nil || suffixLen <= 0 {
-			http.Error(w, "invalid range", http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
-		if suffixLen > fileInfo.Size() {
-			suffixLen = fileInfo.Size()
-		}
-		start = fileInfo.Size() - suffixLen
-	} else {
-		parsedStart, err := strconv.ParseInt(ranges[0], 10, 64)
-		if err != nil {
-			http.Error(w, "invalid range", http.StatusRequestedRangeNotSatisfiable)
-			return
-		}
-		start = parsedStart
-
-		if ranges[1] != "" {
-			if parsedEnd, err := strconv.ParseInt(ranges[1], 10, 64); err == nil {
-				end = parsedEnd
-			}
+	if ranges[1] != "" {
+		if parsedEnd, err := strconv.ParseInt(ranges[1], 10, 64); err == nil {
+			end = parsedEnd
 		}
 	}
 
