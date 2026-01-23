@@ -577,6 +577,11 @@ func (s *Server) handleTranscodingJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if _, err := s.requireAuth(r); err != nil {
+		s.writeError(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	jobID := strings.TrimSpace(r.URL.Query().Get("id"))
 	if jobID != "" {
 		job, ok := s.transcodingMgr.GetJob(jobID)
