@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,19 @@ type TranscodingJob struct {
 	OutputPath string
 	ctx        context.Context
 	cancel     context.CancelFunc
+}
+
+// TranscodingJobSummary contains a safe JSON representation of a job.
+type TranscodingJobSummary struct {
+	ID         string    `json:"id"`
+	MediaID    string    `json:"mediaId"`
+	ProfileID  string    `json:"profileId"`
+	Status     string    `json:"status"`
+	Progress   float64   `json:"progress"`
+	StartedAt  time.Time `json:"startedAt"`
+	FinishedAt time.Time `json:"finishedAt,omitempty"`
+	Error      string    `json:"error,omitempty"`
+	OutputPath string    `json:"outputPath,omitempty"`
 }
 
 // NewTranscodingManager creates a new transcoding manager
@@ -172,6 +186,23 @@ func (tm *TranscodingManager) GetJob(jobID string) (*TranscodingJob, bool) {
 	defer tm.mu.RUnlock()
 	job, ok := tm.activeJobs[jobID]
 	return job, ok
+}
+
+// ListJobs returns a snapshot of all active jobs.
+func (tm *TranscodingManager) ListJobs() []TranscodingJobSummary {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+
+	jobs := make([]TranscodingJobSummary, 0, len(tm.activeJobs))
+	for _, job := range tm.activeJobs {
+		jobs = append(jobs, summarizeJob(job))
+	}
+
+	sort.Slice(jobs, func(i, j int) bool {
+		return jobs[i].StartedAt.Before(jobs[j].StartedAt)
+	})
+
+	return jobs
 }
 
 // CancelJob cancels a transcoding job
@@ -397,4 +428,22 @@ func (tm *TranscodingManager) ServeTranscodedFile(w http.ResponseWriter, r *http
 func generateJobID(mediaID, profileID string) string {
 	sum := sha1.Sum([]byte(mediaID + ":" + profileID))
 	return "job_" + hex.EncodeToString(sum[:8])
+}
+
+func summarizeJob(job *TranscodingJob) TranscodingJobSummary {
+	if job == nil {
+		return TranscodingJobSummary{}
+	}
+
+	return TranscodingJobSummary{
+		ID:         job.ID,
+		MediaID:    job.MediaID,
+		ProfileID:  job.ProfileID,
+		Status:     job.Status,
+		Progress:   job.Progress,
+		StartedAt:  job.StartedAt,
+		FinishedAt: job.FinishedAt,
+		Error:      job.Error,
+		OutputPath: job.OutputPath,
+	}
 }

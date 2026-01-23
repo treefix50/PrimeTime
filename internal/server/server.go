@@ -137,6 +137,7 @@ func New(root, addr string, store MediaStore, scanInterval time.Duration, noInit
 	// Verbesserung 2: Transkodierungs-Profile
 	mux.HandleFunc("/transcoding/profiles", s.handleTranscodingProfiles)
 	mux.HandleFunc("/transcoding/profiles/", s.handleTranscodingProfileDetail)
+	mux.HandleFunc("/transcoding/jobs", s.handleTranscodingJobs)
 
 	// Verbesserung 3: TV Shows/Serien-Verwaltung
 	mux.HandleFunc("/shows", s.handleTVShows)
