@@ -109,10 +109,12 @@ curl http://localhost:8080/library \
 
 ## API Endpoints
 
+**Hinweis:** Geschützte Endpunkte benötigen den Header `Authorization: Bearer <token>`. In den Listen steht `(Session)` für eine gültige Session, `(Admin)` für Admin-Rechte.
+
 ### System
 ```
 GET    /health                         - Healthcheck (optional ?json=1 für Details)
-GET    /stats                          - Statistiken (optional ?detailed=1)
+GET    /stats                          - Statistiken (optional ?detailed=1) (Session)
 GET    /version                        - Version
 ```
 **Query-Parameter für `GET /stats`:**
@@ -121,22 +123,22 @@ GET    /version                        - Version
 ### Authentication
 ```
 POST   /auth/login                    - Login
-POST   /auth/logout                   - Logout
-GET    /auth/session                  - Session validieren
-GET    /auth/users                    - Benutzer auflisten (Admin)
-POST   /auth/users                    - Benutzer erstellen (Admin)
-POST   /auth/users/{id}/password      - Passwort ändern
-DELETE /auth/users/{id}               - Benutzer löschen (Admin)
+POST   /auth/logout                   - Logout (Session)
+GET    /auth/session                  - Session validieren (Session)
+GET    /auth/users                    - Benutzer auflisten (Session, Admin)
+POST   /auth/users                    - Benutzer erstellen (Session, Admin)
+POST   /auth/users/{id}/password      - Passwort ändern (Session)
+DELETE /auth/users/{id}               - Benutzer löschen (Session, Admin)
 ```
 
 ### Media Library
 ```
-GET    /library                       - Alle Medien
-POST   /library                       - Rescan
-POST   /library/scan                  - Scan eines Pfads
-GET    /library/recent                - Kürzlich hinzugefügt
-GET    /library/duplicates            - Duplikate finden
-GET    /library/type/{type}           - Filter nach Typ (movie, tvshow, ...)
+GET    /library                       - Alle Medien (Session)
+POST   /library                       - Rescan (Session)
+POST   /library/scan                  - Scan eines Pfads (Session)
+GET    /library/recent                - Kürzlich hinzugefügt (Session)
+GET    /library/duplicates            - Duplikate finden (Session)
+GET    /library/type/{type}           - Filter nach Typ (movie, tvshow, ...) (Session)
 ```
 
 **Query-Parameter für `GET /library`:**
@@ -164,76 +166,76 @@ curl "http://localhost:8080/library?type=movie&rating=7.5"
 
 ### Items
 ```
-GET    /items/{id}                    - Media-Details
-GET    /items/{id}/exists             - Existiert?
-GET    /items/{id}/stream             - Video-Stream
-GET    /items/{id}/stream?profile=X   - Transkodierter Stream
-GET    /items/{id}/stream.m3u8        - HLS-Playlist
-GET    /items/{id}/stream.m3u8?profile=X - HLS-Playlist (Profil)
-GET    /items/{id}/nfo                - Metadaten
-GET    /items/{id}/nfo/raw            - Raw NFO
-GET    /items/{id}/subtitles          - Untertitel
-GET    /items/{id}/playback           - Playback-State
-POST   /items/{id}/playback           - Playback-State setzen
-GET    /items/{id}/watched            - Gesehen?
-POST   /items/{id}/watched            - Als gesehen markieren
-DELETE /items/{id}/watched            - Gesehen entfernen
-GET    /items/{id}/favorite           - Favorit?
-POST   /items/{id}/favorite           - Favorit setzen
-DELETE /items/{id}/favorite           - Favorit entfernen
-GET    /items/{id}/poster             - Poster-Bild
-GET    /items/{id}/poster/exists      - Poster vorhanden?
+GET    /items/{id}                    - Media-Details (Session)
+GET    /items/{id}/exists             - Existiert? (Session)
+GET    /items/{id}/stream             - Video-Stream (Session)
+GET    /items/{id}/stream?profile=X   - Transkodierter Stream (Session)
+GET    /items/{id}/stream.m3u8        - HLS-Playlist (Session)
+GET    /items/{id}/stream.m3u8?profile=X - HLS-Playlist (Profil) (Session)
+GET    /items/{id}/nfo                - Metadaten (Session)
+GET    /items/{id}/nfo/raw            - Raw NFO (Session)
+GET    /items/{id}/subtitles          - Untertitel (Session)
+GET    /items/{id}/playback           - Playback-State (Session)
+POST   /items/{id}/playback           - Playback-State setzen (Session)
+GET    /items/{id}/watched            - Gesehen? (Session)
+POST   /items/{id}/watched            - Als gesehen markieren (Session)
+DELETE /items/{id}/watched            - Gesehen entfernen (Session)
+GET    /items/{id}/favorite           - Favorit? (Session)
+POST   /items/{id}/favorite           - Favorit setzen (Session)
+DELETE /items/{id}/favorite           - Favorit entfernen (Session)
+GET    /items/{id}/poster             - Poster-Bild (Session)
+GET    /items/{id}/poster/exists      - Poster vorhanden? (Session)
 ```
 
 ### Multi-User
 ```
-GET    /users                         - Alle Benutzer
-POST   /users                         - Benutzer erstellen
-GET    /users/{id}                    - Benutzer-Details
-DELETE /users/{id}                    - Benutzer löschen
+GET    /users                         - Alle Benutzer (Session, Admin)
+POST   /users                         - Benutzer erstellen (Session, Admin)
+GET    /users/{id}                    - Benutzer-Details (Session, Admin)
+DELETE /users/{id}                    - Benutzer löschen (Session, Admin)
 ```
 
 ### TV Shows
 ```
-POST   /shows                         - Auto-Gruppierung
-GET    /shows                         - Alle Serien
-GET    /shows/{id}                    - Serien-Details
-DELETE /shows/{id}                    - Serie löschen
-GET    /shows/{id}/seasons            - Staffeln
-GET    /shows/{id}/seasons/{season}/episodes - Episoden einer Staffel
-GET    /shows/{id}/next-episode       - Nächste Episode
+POST   /shows                         - Auto-Gruppierung (Session)
+GET    /shows                         - Alle Serien (Session)
+GET    /shows/{id}                    - Serien-Details (Session)
+DELETE /shows/{id}                    - Serie löschen (Session)
+GET    /shows/{id}/seasons            - Staffeln (Session)
+GET    /shows/{id}/seasons/{season}/episodes - Episoden einer Staffel (Session)
+GET    /shows/{id}/next-episode       - Nächste Episode (Session)
 ```
 
 ### Transcoding
 ```
-GET    /transcoding/profiles          - Alle Profile
-POST   /transcoding/profiles          - Profil erstellen
-GET    /transcoding/profiles/{id}     - Profil abrufen
-DELETE /transcoding/profiles/{id}     - Profil löschen
-GET    /transcoding/jobs              - Transcoding-Jobs
+GET    /transcoding/profiles          - Alle Profile (Session)
+POST   /transcoding/profiles          - Profil erstellen (Session)
+GET    /transcoding/profiles/{id}     - Profil abrufen (Session)
+DELETE /transcoding/profiles/{id}     - Profil löschen (Session)
+GET    /transcoding/jobs              - Transcoding-Jobs (Session)
 ```
 
 ### Multi-Root
 ```
-GET    /library/roots                 - Alle Roots
-POST   /library/roots                 - Root hinzufügen
-DELETE /library/roots                 - Root entfernen
-POST   /library/roots/{id}/scan       - Root scannen
+GET    /library/roots                 - Alle Roots (Session)
+POST   /library/roots                 - Root hinzufügen (Session)
+DELETE /library/roots                 - Root entfernen (Session)
+POST   /library/roots/{id}/scan       - Root scannen (Session)
 ```
 
 ### Playback & Listen
 ```
-GET    /playback                      - Alle Playback-States (optional ?clientId=, ?unfinished=1)
-GET    /favorites                     - Favoriten-Liste
-GET    /watched                       - Gesehene Items
-GET    /collections                   - Collections (Playlists)
-POST   /collections                   - Collection erstellen
-GET    /collections/{id}              - Collection abrufen
-PUT    /collections/{id}              - Collection aktualisieren
-DELETE /collections/{id}              - Collection löschen
-GET    /collections/{id}/items        - Collection-Items
-POST   /collections/{id}/items        - Item hinzufügen
-DELETE /collections/{id}/items/{mediaId} - Item entfernen
+GET    /playback                      - Alle Playback-States (optional ?clientId=, ?unfinished=1) (Session)
+GET    /favorites                     - Favoriten-Liste (Session)
+GET    /watched                       - Gesehene Items (Session)
+GET    /collections                   - Collections (Playlists) (Session)
+POST   /collections                   - Collection erstellen (Session)
+GET    /collections/{id}              - Collection abrufen (Session)
+PUT    /collections/{id}              - Collection aktualisieren (Session)
+DELETE /collections/{id}              - Collection löschen (Session)
+GET    /collections/{id}/items        - Collection-Items (Session)
+POST   /collections/{id}/items        - Item hinzufügen (Session)
+DELETE /collections/{id}/items/{mediaId} - Item entfernen (Session)
 ```
 
 ## CLI-Optionen
