@@ -109,6 +109,13 @@ curl http://localhost:8080/library \
 
 ## API Endpoints
 
+### System
+```
+GET    /health                         - Healthcheck (optional ?json=1 für Details)
+GET    /stats                          - Statistiken (optional ?detailed=1)
+GET    /version                        - Version
+```
+
 ### Authentication
 ```
 POST   /auth/login                    - Login
@@ -124,13 +131,33 @@ DELETE /auth/users/{id}               - Benutzer löschen (Admin)
 ```
 GET    /library                       - Alle Medien
 POST   /library                       - Rescan
+POST   /library/scan                  - Scan eines Pfads
 GET    /library/recent                - Kürzlich hinzugefügt
 GET    /library/duplicates            - Duplikate finden
+GET    /library/type/{type}           - Filter nach Typ (movie, tvshow, ...)
+```
+
+### Items
+```
 GET    /items/{id}                    - Media-Details
+GET    /items/{id}/exists             - Existiert?
 GET    /items/{id}/stream             - Video-Stream
 GET    /items/{id}/stream?profile=X   - Transkodierter Stream
+GET    /items/{id}/stream.m3u8        - HLS-Playlist
+GET    /items/{id}/stream.m3u8?profile=X - HLS-Playlist (Profil)
 GET    /items/{id}/nfo                - Metadaten
+GET    /items/{id}/nfo/raw            - Raw NFO
+GET    /items/{id}/subtitles          - Untertitel
+GET    /items/{id}/playback           - Playback-State
+POST   /items/{id}/playback           - Playback-State setzen
+GET    /items/{id}/watched            - Gesehen?
+POST   /items/{id}/watched            - Als gesehen markieren
+DELETE /items/{id}/watched            - Gesehen entfernen
+GET    /items/{id}/favorite           - Favorit?
+POST   /items/{id}/favorite           - Favorit setzen
+DELETE /items/{id}/favorite           - Favorit entfernen
 GET    /items/{id}/poster             - Poster-Bild
+GET    /items/{id}/poster/exists      - Poster vorhanden?
 ```
 
 ### Multi-User
@@ -145,7 +172,10 @@ DELETE /users/{id}                    - Benutzer löschen
 ```
 POST   /shows                         - Auto-Gruppierung
 GET    /shows                         - Alle Serien
+GET    /shows/{id}                    - Serien-Details
+DELETE /shows/{id}                    - Serie löschen
 GET    /shows/{id}/seasons            - Staffeln
+GET    /shows/{id}/seasons/{season}/episodes - Episoden einer Staffel
 GET    /shows/{id}/next-episode       - Nächste Episode
 ```
 
@@ -153,13 +183,32 @@ GET    /shows/{id}/next-episode       - Nächste Episode
 ```
 GET    /transcoding/profiles          - Alle Profile
 POST   /transcoding/profiles          - Profil erstellen
+GET    /transcoding/profiles/{id}     - Profil abrufen
+DELETE /transcoding/profiles/{id}     - Profil löschen
+GET    /transcoding/jobs              - Transcoding-Jobs
 ```
 
 ### Multi-Root
 ```
 GET    /library/roots                 - Alle Roots
 POST   /library/roots                 - Root hinzufügen
+DELETE /library/roots                 - Root entfernen
 POST   /library/roots/{id}/scan       - Root scannen
+```
+
+### Playback & Listen
+```
+GET    /playback                      - Alle Playback-States (optional ?clientId=, ?unfinished=1)
+GET    /favorites                     - Favoriten-Liste
+GET    /watched                       - Gesehene Items
+GET    /collections                   - Collections (Playlists)
+POST   /collections                   - Collection erstellen
+GET    /collections/{id}              - Collection abrufen
+PUT    /collections/{id}              - Collection aktualisieren
+DELETE /collections/{id}              - Collection löschen
+GET    /collections/{id}/items        - Collection-Items
+POST   /collections/{id}/items        - Item hinzufügen
+DELETE /collections/{id}/items/{mediaId} - Item entfernen
 ```
 
 ## CLI-Optionen
