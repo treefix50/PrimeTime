@@ -115,6 +115,8 @@ GET    /health                         - Healthcheck (optional ?json=1 für Deta
 GET    /stats                          - Statistiken (optional ?detailed=1)
 GET    /version                        - Version
 ```
+**Query-Parameter für `GET /stats`:**
+- `detailed`: Wenn `1`, liefert zusätzliche Detailstatistiken.
 
 ### Authentication
 ```
@@ -135,6 +137,29 @@ POST   /library/scan                  - Scan eines Pfads
 GET    /library/recent                - Kürzlich hinzugefügt
 GET    /library/duplicates            - Duplikate finden
 GET    /library/type/{type}           - Filter nach Typ (movie, tvshow, ...)
+```
+
+**Query-Parameter für `GET /library`:**
+- `q`: Freitextsuche im Titel (Substring).
+- `sort`: Sortierung (`title`, `modified`, `size`; Default: `title`).
+- `limit`: Maximale Anzahl der Einträge.
+- `offset`: Anzahl der Einträge überspringen (Pagination).
+- `genre`: Genre-Filter (z. B. `Action`).
+- `year`: Jahr-Filter (z. B. `2020`).
+- `type`: Typ-Filter (z. B. `movie`, `tvshow`).
+- `rating`: Mindestbewertung (0–10).
+
+**Body für `POST /library/scan`:**
+```json
+{ "path": "Serien/Star Trek" }
+```
+`path` kann relativ zum Root oder absolut angegeben werden.
+
+**Beispiele (Pagination/Filter):**
+```bash
+curl "http://localhost:8080/library?limit=25&offset=50"
+curl "http://localhost:8080/library?genre=Action&year=2020"
+curl "http://localhost:8080/library?type=movie&rating=7.5"
 ```
 
 ### Items
@@ -330,7 +355,7 @@ curl "http://localhost:8080/library?year=2020" \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # Nach Rating filtern
-curl "http://localhost:8080/library?minRating=8.0" \
+curl "http://localhost:8080/library?rating=8.0" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
