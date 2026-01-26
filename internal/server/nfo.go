@@ -60,7 +60,7 @@ type SubtitleStream struct {
 
 // NFO represents a complete, parsed view of common Kodi-style .nfo files.
 type NFO struct {
-	Type        string   `json:"type"` // movie | tvshow | episode | musicvideo | person | unknown
+	Type        string   `json:"type"` // movie | tvshow | season | episode | musicvideo | person | unknown
 	Title       string   `json:"title,omitempty"`
 	Original    string   `json:"originalTitle,omitempty"`
 	SortTitle   string   `json:"sortTitle,omitempty"`
@@ -282,6 +282,7 @@ func ParseNFOFile(path string) (*NFO, error) {
 		var t struct {
 			XMLName   xml.Name `xml:"tvshow"`
 			Title     string   `xml:"title"`
+			Original  string   `xml:"originaltitle"`
 			SortTitle string   `xml:"sorttitle"`
 			Plot      string   `xml:"plot"`
 			Outline   string   `xml:"outline"`
@@ -345,6 +346,7 @@ func ParseNFOFile(path string) (*NFO, error) {
 		return &NFO{
 			Type:        "tvshow",
 			Title:       strings.TrimSpace(t.Title),
+			Original:    strings.TrimSpace(t.Original),
 			SortTitle:   strings.TrimSpace(t.SortTitle),
 			Plot:        strings.TrimSpace(t.Plot),
 			Outline:     strings.TrimSpace(t.Outline),
@@ -377,6 +379,9 @@ func ParseNFOFile(path string) (*NFO, error) {
 			ShowTitle string   `xml:"showtitle"`
 			Rating    string   `xml:"rating"`
 			Year      string   `xml:"year"`
+			IMDbID    string   `xml:"imdbid"`
+			TMDbID    string   `xml:"tmdbid"`
+			TVDbID    string   `xml:"tvdbid"`
 			Actors    []struct {
 				Name   string `xml:"name"`
 				Role   string `xml:"role"`
@@ -504,6 +509,9 @@ func ParseNFOFile(path string) (*NFO, error) {
 			ShowTitle:     strings.TrimSpace(e.ShowTitle),
 			Rating:        strings.TrimSpace(e.Rating),
 			Year:          strings.TrimSpace(e.Year),
+			IMDbID:        strings.TrimSpace(e.IMDbID),
+			TMDbID:        strings.TrimSpace(e.TMDbID),
+			TVDbID:        strings.TrimSpace(e.TVDbID),
 			Actors:        actors,
 			Directors:     trimAll(e.Directors),
 			Runtime:       strings.TrimSpace(e.Runtime),
@@ -513,6 +521,231 @@ func ParseNFOFile(path string) (*NFO, error) {
 			DateAdded:     strings.TrimSpace(e.DateAdded),
 			StreamDetails: streamDetails,
 			RawRootName:   root,
+		}, nil
+
+	case "episode":
+		var e struct {
+			XMLName   xml.Name `xml:"episode"`
+			Title     string   `xml:"title"`
+			Plot      string   `xml:"plot"`
+			Outline   string   `xml:"outline"`
+			Season    string   `xml:"season"`
+			Episode   string   `xml:"episode"`
+			ShowTitle string   `xml:"showtitle"`
+			Rating    string   `xml:"rating"`
+			Year      string   `xml:"year"`
+			IMDbID    string   `xml:"imdbid"`
+			TMDbID    string   `xml:"tmdbid"`
+			TVDbID    string   `xml:"tvdbid"`
+			Actors    []struct {
+				Name   string `xml:"name"`
+				Role   string `xml:"role"`
+				Type   string `xml:"type"`
+				TMDbID string `xml:"tmdbid"`
+				TVDbID string `xml:"tvdbid"`
+				IMDbID string `xml:"imdbid"`
+			} `xml:"actor"`
+			Directors []string `xml:"director"`
+			Runtime   string   `xml:"runtime"`
+			MPAA      string   `xml:"mpaa"`
+			Premiered string   `xml:"aired"`
+			DateAdded string   `xml:"dateadded"`
+			UniqueIDs []struct {
+				Type  string `xml:"type,attr"`
+				Value string `xml:",chardata"`
+			} `xml:"uniqueid"`
+			FileInfo struct {
+				StreamDetails struct {
+					Video []struct {
+						Codec          string `xml:"codec"`
+						Bitrate        string `xml:"bitrate"`
+						Width          string `xml:"width"`
+						Height         string `xml:"height"`
+						Aspect         string `xml:"aspect"`
+						AspectRatio    string `xml:"aspectratio"`
+						FrameRate      string `xml:"framerate"`
+						ScanType       string `xml:"scantype"`
+						Duration       string `xml:"duration"`
+						DurationInSecs string `xml:"durationinseconds"`
+					} `xml:"video"`
+					Audio []struct {
+						Codec        string `xml:"codec"`
+						Bitrate      string `xml:"bitrate"`
+						Language     string `xml:"language"`
+						Channels     string `xml:"channels"`
+						SamplingRate string `xml:"samplingrate"`
+					} `xml:"audio"`
+					Subtitle []struct {
+						Codec    string `xml:"codec"`
+						Language string `xml:"language"`
+					} `xml:"subtitle"`
+				} `xml:"streamdetails"`
+			} `xml:"fileinfo"`
+		}
+
+		if err := xml.Unmarshal(data, &e); err != nil {
+			return nil, err
+		}
+
+		actors := make([]Actor, 0, len(e.Actors))
+		for _, a := range e.Actors {
+			if strings.TrimSpace(a.Name) != "" {
+				actors = append(actors, Actor{
+					Name:   strings.TrimSpace(a.Name),
+					Role:   strings.TrimSpace(a.Role),
+					Type:   strings.TrimSpace(a.Type),
+					TMDbID: strings.TrimSpace(a.TMDbID),
+					TVDbID: strings.TrimSpace(a.TVDbID),
+					IMDbID: strings.TrimSpace(a.IMDbID),
+				})
+			}
+		}
+
+		uniqueIDs := make([]UniqueID, 0, len(e.UniqueIDs))
+		for _, uid := range e.UniqueIDs {
+			if strings.TrimSpace(uid.Type) != "" && strings.TrimSpace(uid.Value) != "" {
+				uniqueIDs = append(uniqueIDs, UniqueID{
+					Type:  strings.TrimSpace(uid.Type),
+					Value: strings.TrimSpace(uid.Value),
+				})
+			}
+		}
+
+		var streamDetails *StreamDetails
+		if len(e.FileInfo.StreamDetails.Video) > 0 || len(e.FileInfo.StreamDetails.Audio) > 0 || len(e.FileInfo.StreamDetails.Subtitle) > 0 {
+			streamDetails = &StreamDetails{}
+
+			for _, v := range e.FileInfo.StreamDetails.Video {
+				streamDetails.Video = append(streamDetails.Video, VideoStream{
+					Codec:          strings.TrimSpace(v.Codec),
+					Bitrate:        strings.TrimSpace(v.Bitrate),
+					Width:          strings.TrimSpace(v.Width),
+					Height:         strings.TrimSpace(v.Height),
+					Aspect:         strings.TrimSpace(v.Aspect),
+					AspectRatio:    strings.TrimSpace(v.AspectRatio),
+					FrameRate:      strings.TrimSpace(v.FrameRate),
+					ScanType:       strings.TrimSpace(v.ScanType),
+					Duration:       strings.TrimSpace(v.Duration),
+					DurationInSecs: strings.TrimSpace(v.DurationInSecs),
+				})
+			}
+
+			for _, a := range e.FileInfo.StreamDetails.Audio {
+				streamDetails.Audio = append(streamDetails.Audio, AudioStream{
+					Codec:        strings.TrimSpace(a.Codec),
+					Bitrate:      strings.TrimSpace(a.Bitrate),
+					Language:     strings.TrimSpace(a.Language),
+					Channels:     strings.TrimSpace(a.Channels),
+					SamplingRate: strings.TrimSpace(a.SamplingRate),
+				})
+			}
+
+			for _, s := range e.FileInfo.StreamDetails.Subtitle {
+				streamDetails.Subtitle = append(streamDetails.Subtitle, SubtitleStream{
+					Codec:    strings.TrimSpace(s.Codec),
+					Language: strings.TrimSpace(s.Language),
+				})
+			}
+		}
+
+		return &NFO{
+			Type:          "episode",
+			Title:         strings.TrimSpace(e.Title),
+			Plot:          strings.TrimSpace(e.Plot),
+			Outline:       strings.TrimSpace(e.Outline),
+			Season:        strings.TrimSpace(e.Season),
+			Episode:       strings.TrimSpace(e.Episode),
+			ShowTitle:     strings.TrimSpace(e.ShowTitle),
+			Rating:        strings.TrimSpace(e.Rating),
+			Year:          strings.TrimSpace(e.Year),
+			IMDbID:        strings.TrimSpace(e.IMDbID),
+			TMDbID:        strings.TrimSpace(e.TMDbID),
+			TVDbID:        strings.TrimSpace(e.TVDbID),
+			Actors:        actors,
+			Directors:     trimAll(e.Directors),
+			Runtime:       strings.TrimSpace(e.Runtime),
+			MPAA:          strings.TrimSpace(e.MPAA),
+			Premiered:     strings.TrimSpace(e.Premiered),
+			UniqueIDs:     uniqueIDs,
+			DateAdded:     strings.TrimSpace(e.DateAdded),
+			StreamDetails: streamDetails,
+			RawRootName:   root,
+		}, nil
+
+	case "season":
+		var s struct {
+			XMLName     xml.Name `xml:"season"`
+			Title       string   `xml:"title"`
+			SortTitle   string   `xml:"sorttitle"`
+			Plot        string   `xml:"plot"`
+			Outline     string   `xml:"outline"`
+			Season      string   `xml:"seasonnumber"`
+			Year        string   `xml:"year"`
+			Premiered   string   `xml:"premiered"`
+			ReleaseDate string   `xml:"releasedate"`
+			DateAdded   string   `xml:"dateadded"`
+			TVDbID      string   `xml:"tvdbid"`
+			Countries   []string `xml:"country"`
+			Studios     []string `xml:"studio"`
+			Actors      []struct {
+				Name   string `xml:"name"`
+				Role   string `xml:"role"`
+				Type   string `xml:"type"`
+				TMDbID string `xml:"tmdbid"`
+				TVDbID string `xml:"tvdbid"`
+				IMDbID string `xml:"imdbid"`
+			} `xml:"actor"`
+			UniqueIDs []struct {
+				Type  string `xml:"type,attr"`
+				Value string `xml:",chardata"`
+			} `xml:"uniqueid"`
+		}
+
+		if err := xml.Unmarshal(data, &s); err != nil {
+			return nil, err
+		}
+
+		actors := make([]Actor, 0, len(s.Actors))
+		for _, a := range s.Actors {
+			if strings.TrimSpace(a.Name) != "" {
+				actors = append(actors, Actor{
+					Name:   strings.TrimSpace(a.Name),
+					Role:   strings.TrimSpace(a.Role),
+					Type:   strings.TrimSpace(a.Type),
+					TMDbID: strings.TrimSpace(a.TMDbID),
+					TVDbID: strings.TrimSpace(a.TVDbID),
+					IMDbID: strings.TrimSpace(a.IMDbID),
+				})
+			}
+		}
+
+		uniqueIDs := make([]UniqueID, 0, len(s.UniqueIDs))
+		for _, uid := range s.UniqueIDs {
+			if strings.TrimSpace(uid.Type) != "" && strings.TrimSpace(uid.Value) != "" {
+				uniqueIDs = append(uniqueIDs, UniqueID{
+					Type:  strings.TrimSpace(uid.Type),
+					Value: strings.TrimSpace(uid.Value),
+				})
+			}
+		}
+
+		return &NFO{
+			Type:        "season",
+			Title:       strings.TrimSpace(s.Title),
+			SortTitle:   strings.TrimSpace(s.SortTitle),
+			Plot:        strings.TrimSpace(s.Plot),
+			Outline:     strings.TrimSpace(s.Outline),
+			Season:      strings.TrimSpace(s.Season),
+			Year:        strings.TrimSpace(s.Year),
+			Premiered:   strings.TrimSpace(s.Premiered),
+			ReleaseDate: strings.TrimSpace(s.ReleaseDate),
+			DateAdded:   strings.TrimSpace(s.DateAdded),
+			TVDbID:      strings.TrimSpace(s.TVDbID),
+			Countries:   trimAll(s.Countries),
+			Studios:     trimAll(s.Studios),
+			Actors:      actors,
+			UniqueIDs:   uniqueIDs,
+			RawRootName: root,
 		}, nil
 
 	case "musicvideo":
