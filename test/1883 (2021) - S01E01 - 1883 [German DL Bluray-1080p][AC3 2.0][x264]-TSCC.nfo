@@ -1,0 +1,100 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<episodedetails>
+  <plot><![CDATA[Die Familie Dutton begibt sich auf eine Reise nach Westen, in die letzte Bastion des unberührten Amerikas. James kommt in Texas an, wo er und seine Familie sich darauf vorbereiten, auf der Suche nach der neuen Heimat die Great Plains zu durchqueren.]]></plot>
+  <outline />
+  <lockdata>false</lockdata>
+  <dateadded>2023-01-31 20:19:58</dateadded>
+  <title>1883</title>
+  <actor>
+    <name>Gratiela Brancusi</name>
+    <type>GuestStar</type>
+    <tvdbid>9082282</tvdbid>
+  </actor>
+  <actor>
+    <name>Anna Fiamora</name>
+    <type>GuestStar</type>
+    <tvdbid>9086520</tvdbid>
+  </actor>
+  <director tmdbid="1215399" tvdbid="329275">Taylor Sheridan</director>
+  <writer tmdbid="1215399" tvdbid="329275">Taylor Sheridan</writer>
+  <credits tmdbid="1215399" tvdbid="329275">Taylor Sheridan</credits>
+  <rating>8.024</rating>
+  <year>2021</year>
+  <sorttitle>1883</sorttitle>
+  <imdbid>tt14103574</imdbid>
+  <tvdbid>8234816</tvdbid>
+  <runtime>67</runtime>
+  <uniqueid type="imdb">tt14103574</uniqueid>
+  <uniqueid type="tvdb">8234816</uniqueid>
+  <episode>1</episode>
+  <season>1</season>
+  <aired>2021-12-19</aired>
+  <fileinfo>
+    <streamdetails>
+      <video>
+        <codec>h264</codec>
+        <micodec>h264</micodec>
+        <bitrate>11751893</bitrate>
+        <width>1920</width>
+        <height>960</height>
+        <aspect>2:1</aspect>
+        <aspectratio>2:1</aspectratio>
+        <framerate>23.976025</framerate>
+        <scantype>progressive</scantype>
+        <default>True</default>
+        <forced>False</forced>
+        <duration>66</duration>
+        <durationinseconds>4015</durationinseconds>
+      </video>
+      <audio>
+        <codec>ac3</codec>
+        <micodec>ac3</micodec>
+        <bitrate>224000</bitrate>
+        <language>ger</language>
+        <scantype>progressive</scantype>
+        <channels>2</channels>
+        <samplingrate>48000</samplingrate>
+        <default>True</default>
+        <forced>False</forced>
+      </audio>
+      <audio>
+        <codec>eac3</codec>
+        <micodec>eac3</micodec>
+        <bitrate>1024000</bitrate>
+        <language>eng</language>
+        <scantype>progressive</scantype>
+        <channels>6</channels>
+        <samplingrate>48000</samplingrate>
+        <default>False</default>
+        <forced>False</forced>
+      </audio>
+      <subtitle>
+        <codec>subrip</codec>
+        <micodec>subrip</micodec>
+        <language>ger</language>
+        <scantype>progressive</scantype>
+        <default>False</default>
+        <forced>False</forced>
+      </subtitle>
+      <subtitle>
+        <codec>subrip</codec>
+        <micodec>subrip</micodec>
+        <language>eng</language>
+        <scantype>progressive</scantype>
+        <default>False</default>
+        <forced>False</forced>
+      </subtitle>
+      <subtitle>
+        <codec>PGSSUB</codec>
+        <micodec>PGSSUB</micodec>
+        <width>1920</width>
+        <height>1080</height>
+        <language>eng</language>
+        <scantype>progressive</scantype>
+        <default>False</default>
+        <forced>False</forced>
+      </subtitle>
+    </streamdetails>
+  </fileinfo>
+  <showtitle>1883</showtitle>
+</episodedetails>
