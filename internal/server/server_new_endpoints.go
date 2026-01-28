@@ -172,6 +172,7 @@ func (s *Server) handleTranscodingProfiles(w http.ResponseWriter, r *http.Reques
 			AudioCodec           string   `json:"audioCodec"`
 			SupportedAudioCodecs []string `json:"supportedAudioCodecs"`
 			MaxAudioChannels     int      `json:"maxAudioChannels"`
+			AudioLayout          string   `json:"audioLayout"`
 			PreferredLanguages   []string `json:"preferredLanguages"`
 			Resolution           string   `json:"resolution"`
 			MaxBitrate           int64    `json:"maxBitrate"`
@@ -206,6 +207,7 @@ func (s *Server) handleTranscodingProfiles(w http.ResponseWriter, r *http.Reques
 			AudioCodec:           payload.AudioCodec,
 			SupportedAudioCodecs: payload.SupportedAudioCodecs,
 			MaxAudioChannels:     payload.MaxAudioChannels,
+			AudioLayout:          payload.AudioLayout,
 			PreferredLanguages:   payload.PreferredLanguages,
 			Resolution:           payload.Resolution,
 			MaxBitrate:           payload.MaxBitrate,
