@@ -113,3 +113,27 @@ Beispiel (Stereo-Downmix mit explizitem Pan-Layout):
   "container": "mp4"
 }
 ```
+
+## Audio-Normalisierung für Transcoding-Profile
+
+Für Transcoding-Profile kann optional eine Audio-Normalisierung aktiviert werden. Der Wert wird an FFmpeg
+als zusätzlicher Filter in `-af` gehängt (z. B. `loudnorm` oder `dynaudnorm`). Ist das Feld leer, wird kein
+Normalisierungsfilter gesetzt.
+
+Relevantes Feld im Transcoding-Profil (API `POST /transcoding/profiles`):
+
+* `audioNormalization`: FFmpeg-Filtername, z. B. `loudnorm` oder `dynaudnorm`.
+
+Beispiel (Stereo-Downmix + Loudness-Normalisierung):
+
+```json
+{
+  "name": "stereo-loudnorm",
+  "videoCodec": "libx264",
+  "audioCodec": "aac",
+  "maxAudioChannels": 2,
+  "audioLayout": "stereo",
+  "audioNormalization": "loudnorm",
+  "container": "mp4"
+}
+```

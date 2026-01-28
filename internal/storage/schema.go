@@ -442,6 +442,12 @@ var migrations = []migration{
 			`ALTER TABLE transcoding_profiles ADD COLUMN audio_layout TEXT;`,
 		},
 	},
+	{
+		version: 14,
+		statements: []string{
+			`ALTER TABLE transcoding_profiles ADD COLUMN audio_normalization TEXT;`,
+		},
+	},
 }
 
 func (s *Store) EnsureSchema() error {

@@ -204,13 +204,14 @@ func (s *Store) CreateTranscodingProfile(profile server.TranscodingProfile) erro
 	_, err := s.db.Exec(`
 		INSERT INTO transcoding_profiles (
 			id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
-			audio_layout, preferred_languages, resolution, max_bitrate, container, created_at
+			audio_layout, audio_normalization, preferred_languages, resolution, max_bitrate, container, created_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, profile.ID, profile.Name, profile.VideoCodec, profile.AudioCodec,
 		nullString(joinStringList(profile.SupportedAudioCodecs)),
 		nullInt64(int64(profile.MaxAudioChannels)),
 		nullString(profile.AudioLayout),
+		nullString(profile.AudioNormalization),
 		nullString(joinStringList(profile.PreferredLanguages)),
 		nullString(profile.Resolution),
 		nullInt64(profile.MaxBitrate),
@@ -231,15 +232,16 @@ func (s *Store) GetTranscodingProfile(id string) (*server.TranscodingProfile, bo
 	var preferredLanguages sql.NullString
 	var maxAudioChannels sql.NullInt64
 	var audioLayout sql.NullString
+	var audioNormalization sql.NullString
 	var createdAt int64
 
 	err := s.db.QueryRow(`
 		SELECT id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
-			audio_layout, preferred_languages, resolution, max_bitrate, container, created_at
+			audio_layout, audio_normalization, preferred_languages, resolution, max_bitrate, container, created_at
 		FROM transcoding_profiles
 		WHERE id = ?
 	`, id).Scan(&profile.ID, &profile.Name, &profile.VideoCodec, &profile.AudioCodec,
-		&supportedAudioCodecs, &maxAudioChannels, &audioLayout, &preferredLanguages,
+		&supportedAudioCodecs, &maxAudioChannels, &audioLayout, &audioNormalization, &preferredLanguages,
 		&resolution, &maxBitrate, &profile.Container, &createdAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -259,6 +261,9 @@ func (s *Store) GetTranscodingProfile(id string) (*server.TranscodingProfile, bo
 	}
 	if audioLayout.Valid {
 		profile.AudioLayout = audioLayout.String
+	}
+	if audioNormalization.Valid {
+		profile.AudioNormalization = audioNormalization.String
 	}
 	profile.SupportedAudioCodecs = splitStringList(supportedAudioCodecs)
 	profile.PreferredLanguages = splitStringList(preferredLanguages)
@@ -278,15 +283,16 @@ func (s *Store) GetTranscodingProfileByName(name string) (*server.TranscodingPro
 	var preferredLanguages sql.NullString
 	var maxAudioChannels sql.NullInt64
 	var audioLayout sql.NullString
+	var audioNormalization sql.NullString
 	var createdAt int64
 
 	err := s.db.QueryRow(`
 		SELECT id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
-			audio_layout, preferred_languages, resolution, max_bitrate, container, created_at
+			audio_layout, audio_normalization, preferred_languages, resolution, max_bitrate, container, created_at
 		FROM transcoding_profiles
 		WHERE name = ?
 	`, name).Scan(&profile.ID, &profile.Name, &profile.VideoCodec, &profile.AudioCodec,
-		&supportedAudioCodecs, &maxAudioChannels, &audioLayout, &preferredLanguages,
+		&supportedAudioCodecs, &maxAudioChannels, &audioLayout, &audioNormalization, &preferredLanguages,
 		&resolution, &maxBitrate, &profile.Container, &createdAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -307,6 +313,9 @@ func (s *Store) GetTranscodingProfileByName(name string) (*server.TranscodingPro
 	if audioLayout.Valid {
 		profile.AudioLayout = audioLayout.String
 	}
+	if audioNormalization.Valid {
+		profile.AudioNormalization = audioNormalization.String
+	}
 	profile.SupportedAudioCodecs = splitStringList(supportedAudioCodecs)
 	profile.PreferredLanguages = splitStringList(preferredLanguages)
 	profile.CreatedAt = time.Unix(createdAt, 0)
@@ -320,7 +329,7 @@ func (s *Store) GetAllTranscodingProfiles() ([]server.TranscodingProfile, error)
 
 	rows, err := s.db.Query(`
 		SELECT id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
-			audio_layout, preferred_languages, resolution, max_bitrate, container, created_at
+			audio_layout, audio_normalization, preferred_languages, resolution, max_bitrate, container, created_at
 		FROM transcoding_profiles
 		ORDER BY name
 	`)
@@ -338,10 +347,11 @@ func (s *Store) GetAllTranscodingProfiles() ([]server.TranscodingProfile, error)
 		var preferredLanguages sql.NullString
 		var maxAudioChannels sql.NullInt64
 		var audioLayout sql.NullString
+		var audioNormalization sql.NullString
 		var createdAt int64
 
 		if err := rows.Scan(&profile.ID, &profile.Name, &profile.VideoCodec, &profile.AudioCodec,
-			&supportedAudioCodecs, &maxAudioChannels, &audioLayout, &preferredLanguages,
+			&supportedAudioCodecs, &maxAudioChannels, &audioLayout, &audioNormalization, &preferredLanguages,
 			&resolution, &maxBitrate, &profile.Container, &createdAt); err != nil {
 			return nil, err
 		}
@@ -357,6 +367,9 @@ func (s *Store) GetAllTranscodingProfiles() ([]server.TranscodingProfile, error)
 		}
 		if audioLayout.Valid {
 			profile.AudioLayout = audioLayout.String
+		}
+		if audioNormalization.Valid {
+			profile.AudioNormalization = audioNormalization.String
 		}
 		profile.SupportedAudioCodecs = splitStringList(supportedAudioCodecs)
 		profile.PreferredLanguages = splitStringList(preferredLanguages)

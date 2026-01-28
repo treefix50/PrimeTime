@@ -12,20 +12,21 @@ import (
 
 // TranscodeOptions defines the parameters for transcoding
 type TranscodeOptions struct {
-	InputPath         string
-	OutputPath        string
-	VideoCodec        string
-	AudioCodec        string
-	AudioBitrateKbps  int64
-	AudioTrackIndex   int
-	AudioChannels     int
-	AudioLayout       string
-	PreferredLanguage string
-	Resolution        string
-	MaxBitrate        int64
-	Container         string
-	StartTime         float64 // in seconds
-	Duration          float64 // in seconds (0 = until end)
+	InputPath          string
+	OutputPath         string
+	VideoCodec         string
+	AudioCodec         string
+	AudioBitrateKbps   int64
+	AudioTrackIndex    int
+	AudioChannels      int
+	AudioLayout        string
+	AudioNormalization string
+	PreferredLanguage  string
+	Resolution         string
+	MaxBitrate         int64
+	Container          string
+	StartTime          float64 // in seconds
+	Duration           float64 // in seconds (0 = until end)
 }
 
 // TranscodeResult contains information about the transcoding result
@@ -122,7 +123,7 @@ func buildTranscodeArgs(opts TranscodeOptions) []string {
 		} else if opts.AudioCodec == "aac" {
 			args = append(args, "-b:a", "128k")
 		}
-		args = appendAudioChannelArgs(args, opts)
+		args = appendAudioProcessingArgs(args, opts)
 	}
 
 	// Container-specific options
@@ -231,7 +232,7 @@ func buildHLSArgs(opts TranscodeOptions, segmentDuration int) []string {
 		} else if opts.AudioCodec == "aac" {
 			args = append(args, "-b:a", "128k")
 		}
-		args = appendAudioChannelArgs(args, opts)
+		args = appendAudioProcessingArgs(args, opts)
 	}
 
 	// HLS-specific options
@@ -265,12 +266,20 @@ func appendAudioMapArgs(args []string, opts TranscodeOptions) []string {
 	return args
 }
 
-func appendAudioChannelArgs(args []string, opts TranscodeOptions) []string {
+func appendAudioProcessingArgs(args []string, opts TranscodeOptions) []string {
 	if opts.AudioChannels > 0 {
 		args = append(args, "-ac", strconv.Itoa(opts.AudioChannels))
 	}
+
+	filters := make([]string, 0, 2)
 	if strings.TrimSpace(opts.AudioLayout) != "" {
-		args = append(args, "-af", fmt.Sprintf("pan=%s", opts.AudioLayout))
+		filters = append(filters, fmt.Sprintf("pan=%s", opts.AudioLayout))
+	}
+	if strings.TrimSpace(opts.AudioNormalization) != "" {
+		filters = append(filters, opts.AudioNormalization)
+	}
+	if len(filters) > 0 {
+		args = append(args, "-af", strings.Join(filters, ","))
 	}
 	return args
 }
