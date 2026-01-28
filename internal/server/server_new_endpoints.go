@@ -167,12 +167,15 @@ func (s *Server) handleTranscodingProfiles(w http.ResponseWriter, r *http.Reques
 		}
 
 		var payload struct {
-			Name       string `json:"name"`
-			VideoCodec string `json:"videoCodec"`
-			AudioCodec string `json:"audioCodec"`
-			Resolution string `json:"resolution"`
-			MaxBitrate int64  `json:"maxBitrate"`
-			Container  string `json:"container"`
+			Name                 string   `json:"name"`
+			VideoCodec           string   `json:"videoCodec"`
+			AudioCodec           string   `json:"audioCodec"`
+			SupportedAudioCodecs []string `json:"supportedAudioCodecs"`
+			MaxAudioChannels     int      `json:"maxAudioChannels"`
+			PreferredLanguages   []string `json:"preferredLanguages"`
+			Resolution           string   `json:"resolution"`
+			MaxBitrate           int64    `json:"maxBitrate"`
+			Container            string   `json:"container"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			s.writeError(w, "bad request", http.StatusBadRequest)
@@ -197,14 +200,17 @@ func (s *Server) handleTranscodingProfiles(w http.ResponseWriter, r *http.Reques
 
 		id := generateProfileID(payload.Name)
 		profile := TranscodingProfile{
-			ID:         id,
-			Name:       payload.Name,
-			VideoCodec: payload.VideoCodec,
-			AudioCodec: payload.AudioCodec,
-			Resolution: payload.Resolution,
-			MaxBitrate: payload.MaxBitrate,
-			Container:  payload.Container,
-			CreatedAt:  time.Now(),
+			ID:                   id,
+			Name:                 payload.Name,
+			VideoCodec:           payload.VideoCodec,
+			AudioCodec:           payload.AudioCodec,
+			SupportedAudioCodecs: payload.SupportedAudioCodecs,
+			MaxAudioChannels:     payload.MaxAudioChannels,
+			PreferredLanguages:   payload.PreferredLanguages,
+			Resolution:           payload.Resolution,
+			MaxBitrate:           payload.MaxBitrate,
+			Container:            payload.Container,
+			CreatedAt:            time.Now(),
 		}
 
 		if err := s.lib.store.CreateTranscodingProfile(profile); err != nil {
@@ -504,7 +510,8 @@ func (s *Server) handleTranscodedStream(w http.ResponseWriter, r *http.Request, 
 	}
 
 	// Start transcoding job
-	job, err := s.transcodingMgr.StartTranscoding(item.ID, profile.ID, item, *profile)
+	selection := selectAudioSelection(*profile, item, s.lib.store)
+	job, err := s.transcodingMgr.StartTranscoding(item.ID, profile.ID, item, *profile, selection)
 	if err != nil {
 		s.writeError(w, errInternal, http.StatusInternalServerError)
 		return
@@ -545,7 +552,8 @@ func (s *Server) handleHLSStream(w http.ResponseWriter, r *http.Request, item Me
 	}
 
 	// Start HLS transcoding job
-	job, err := s.transcodingMgr.StartHLSTranscoding(item.ID, profile.ID, item, *profile)
+	selection := selectAudioSelection(*profile, item, s.lib.store)
+	job, err := s.transcodingMgr.StartHLSTranscoding(item.ID, profile.ID, item, *profile, selection)
 	if err != nil {
 		s.writeError(w, errInternal, http.StatusInternalServerError)
 		return

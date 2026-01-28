@@ -177,14 +177,17 @@ type User struct {
 
 // Verbesserung 2: Transcoding types
 type TranscodingProfile struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	VideoCodec string    `json:"videoCodec"`
-	AudioCodec string    `json:"audioCodec"`
-	Resolution string    `json:"resolution,omitempty"`
-	MaxBitrate int64     `json:"maxBitrate,omitempty"`
-	Container  string    `json:"container"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID                   string    `json:"id"`
+	Name                 string    `json:"name"`
+	VideoCodec           string    `json:"videoCodec"`
+	AudioCodec           string    `json:"audioCodec"`
+	SupportedAudioCodecs []string  `json:"supportedAudioCodecs,omitempty"`
+	MaxAudioChannels     int       `json:"maxAudioChannels,omitempty"`
+	PreferredLanguages   []string  `json:"preferredLanguages,omitempty"`
+	Resolution           string    `json:"resolution,omitempty"`
+	MaxBitrate           int64     `json:"maxBitrate,omitempty"`
+	Container            string    `json:"container"`
+	CreatedAt            time.Time `json:"createdAt"`
 }
 
 type TranscodingCache struct {

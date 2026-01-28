@@ -12,15 +12,17 @@ import (
 
 // TranscodeOptions defines the parameters for transcoding
 type TranscodeOptions struct {
-	InputPath  string
-	OutputPath string
-	VideoCodec string
-	AudioCodec string
-	Resolution string
-	MaxBitrate int64
-	Container  string
-	StartTime  float64 // in seconds
-	Duration   float64 // in seconds (0 = until end)
+	InputPath         string
+	OutputPath        string
+	VideoCodec        string
+	AudioCodec        string
+	AudioTrackIndex   int
+	PreferredLanguage string
+	Resolution        string
+	MaxBitrate        int64
+	Container         string
+	StartTime         float64 // in seconds
+	Duration          float64 // in seconds (0 = until end)
 }
 
 // TranscodeResult contains information about the transcoding result
@@ -78,6 +80,8 @@ func buildTranscodeArgs(opts TranscodeOptions) []string {
 	if opts.Duration > 0 {
 		args = append(args, "-t", fmt.Sprintf("%.2f", opts.Duration))
 	}
+
+	args = appendAudioMapArgs(args, opts)
 
 	// Video codec
 	if opts.VideoCodec == "copy" {
@@ -178,6 +182,8 @@ func buildHLSArgs(opts TranscodeOptions, segmentDuration int) []string {
 		args = append(args, "-t", fmt.Sprintf("%.2f", opts.Duration))
 	}
 
+	args = appendAudioMapArgs(args, opts)
+
 	// Video codec
 	if opts.VideoCodec == "copy" {
 		args = append(args, "-c:v", "copy")
@@ -235,6 +241,18 @@ func buildHLSArgs(opts TranscodeOptions, segmentDuration int) []string {
 	// Output playlist file
 	args = append(args, opts.OutputPath)
 
+	return args
+}
+
+func appendAudioMapArgs(args []string, opts TranscodeOptions) []string {
+	if opts.AudioTrackIndex >= 0 || opts.PreferredLanguage != "" {
+		args = append(args, "-map", "0:v:0")
+		if opts.AudioTrackIndex >= 0 {
+			args = append(args, "-map", fmt.Sprintf("0:a:%d", opts.AudioTrackIndex))
+			return args
+		}
+		args = append(args, "-map", fmt.Sprintf("0:a:m:language:%s", opts.PreferredLanguage))
+	}
 	return args
 }
 
