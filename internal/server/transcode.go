@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -274,7 +276,7 @@ func (tm *TranscodingManager) StartHLSTranscoding(mediaID, profileID string, ite
 	}
 
 	// Prepare output path (playlist file)
-	playlistPath := filepath.Join(hlsDir, "playlist.m3u8")
+	playlistPath := filepath.Join(hlsDir, "master.m3u8")
 
 	// Create job
 	ctx, cancel := context.WithCancel(context.Background())
@@ -304,33 +306,58 @@ func (tm *TranscodingManager) runHLSTranscoding(job *TranscodingJob, item MediaI
 	job.Status = "running"
 	tm.mu.Unlock()
 
-	audioDecision := decideAudioTranscode(profile, selection)
-	log.Printf(
-		"level=info msg=\"audio codec decision\" profile=%s source_codec=%s selected_codec=%s bitrate_kbps=%d note=%q",
-		profile.Name,
-		selection.SourceCodec,
-		audioDecision.Codec,
-		audioDecision.BitrateKbps,
-		audioDecision.DecisionNote,
-	)
+	hlsDir := filepath.Dir(playlistPath)
+	videoPlaylistPath := filepath.Join(hlsDir, "video.m3u8")
+	audioVariants := tm.collectHLSAudioVariants(item, profile, selection)
 
-	opts := ffmpeg.TranscodeOptions{
-		InputPath:          item.VideoPath,
-		OutputPath:         playlistPath,
-		VideoCodec:         profile.VideoCodec,
-		AudioCodec:         audioDecision.Codec,
-		AudioBitrateKbps:   audioDecision.BitrateKbps,
-		AudioTrackIndex:    selection.TrackIndex,
-		AudioChannels:      profile.MaxAudioChannels,
-		AudioLayout:        profile.AudioLayout,
-		AudioNormalization: profile.AudioNormalization,
-		PreferredLanguage:  selection.PreferredLanguage,
-		Resolution:         profile.Resolution,
-		MaxBitrate:         profile.MaxBitrate,
-		Container:          "mpegts", // HLS uses MPEG-TS segments
+	videoOpts := ffmpeg.TranscodeOptions{
+		InputPath:    item.VideoPath,
+		OutputPath:   videoPlaylistPath,
+		VideoCodec:   profile.VideoCodec,
+		Resolution:   profile.Resolution,
+		MaxBitrate:   profile.MaxBitrate,
+		Container:    "mpegts",
+		DisableAudio: true,
 	}
 
-	result, err := ffmpeg.TranscodeToHLS(job.ctx, tm.ffmpegPath, opts, 6)
+	_, err := ffmpeg.TranscodeToHLS(job.ctx, tm.ffmpegPath, videoOpts, 6)
+	if err == nil {
+		for i := range audioVariants {
+			variant := audioVariants[i]
+			audioSelection := AudioSelection{
+				TrackIndex:        variant.TrackIndex,
+				PreferredLanguage: variant.Language,
+				SourceCodec:       variant.Codec,
+			}
+			audioDecision := decideAudioTranscode(profile, audioSelection)
+			log.Printf(
+				"level=info msg=\"audio codec decision\" profile=%s track=%d source_codec=%s selected_codec=%s bitrate_kbps=%d note=%q",
+				profile.Name,
+				variant.TrackIndex,
+				variant.Codec,
+				audioDecision.Codec,
+				audioDecision.BitrateKbps,
+				audioDecision.DecisionNote,
+			)
+			audioOpts := ffmpeg.TranscodeOptions{
+				InputPath:          item.VideoPath,
+				OutputPath:         filepath.Join(hlsDir, variant.PlaylistFilename),
+				AudioCodec:         audioDecision.Codec,
+				AudioBitrateKbps:   audioDecision.BitrateKbps,
+				AudioTrackIndex:    variant.TrackIndex,
+				AudioChannels:      profile.MaxAudioChannels,
+				AudioLayout:        profile.AudioLayout,
+				AudioNormalization: profile.AudioNormalization,
+				PreferredLanguage:  variant.Language,
+				Container:          "mpegts",
+				DisableVideo:       true,
+			}
+			if _, audioErr := ffmpeg.TranscodeToHLS(job.ctx, tm.ffmpegPath, audioOpts, 6); audioErr != nil {
+				err = audioErr
+				break
+			}
+		}
+	}
 
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -342,25 +369,36 @@ func (tm *TranscodingManager) runHLSTranscoding(job *TranscodingJob, item MediaI
 		return
 	}
 
+	if err := writeHLSMasterPlaylist(playlistPath, profile, filepath.Base(videoPlaylistPath), audioVariants); err != nil {
+		job.Status = "failed"
+		job.Error = err.Error()
+		job.FinishedAt = time.Now()
+		return
+	}
+
 	job.Status = "completed"
 	job.Progress = 100
-	job.OutputPath = result.OutputPath
+	job.OutputPath = playlistPath
 	job.FinishedAt = time.Now()
 }
 
 // ServeHLSPlaylist serves an HLS playlist file
 func (tm *TranscodingManager) ServeHLSPlaylist(w http.ResponseWriter, r *http.Request, playlistPath string) {
 	// Check if file exists
-	if _, err := os.Stat(playlistPath); os.IsNotExist(err) {
+	content, err := os.ReadFile(playlistPath)
+	if err != nil {
 		http.Error(w, "playlist not found", http.StatusNotFound)
 		return
 	}
+
+	basePath := hlsBasePath(r.URL.Path)
+	mapped := rewriteHLSPlaylist(content, basePath, r.URL.RawQuery)
 
 	// Set appropriate headers
 	w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 	w.Header().Set("Cache-Control", "no-cache")
 
-	http.ServeFile(w, r, playlistPath)
+	_, _ = w.Write(mapped)
 }
 
 // ServeHLSSegment serves an HLS segment file
@@ -483,4 +521,223 @@ func summarizeJob(job *TranscodingJob) TranscodingJobSummary {
 		Error:      job.Error,
 		OutputPath: job.OutputPath,
 	}
+}
+
+type hlsAudioVariant struct {
+	TrackIndex       int
+	Language         string
+	Name             string
+	Codec            string
+	PlaylistFilename string
+	Default          bool
+}
+
+func (tm *TranscodingManager) collectHLSAudioVariants(item MediaItem, profile TranscodingProfile, selection AudioSelection) []hlsAudioVariant {
+	streams := tm.lookupAudioStreams(item)
+	var variants []hlsAudioVariant
+	if len(streams) > 0 {
+		for i, stream := range streams {
+			if !withinChannelLimit(stream, profile.MaxAudioChannels) {
+				continue
+			}
+			variants = append(variants, hlsAudioVariant{
+				TrackIndex: i,
+				Language:   strings.TrimSpace(stream.Language),
+				Codec:      strings.TrimSpace(stream.Codec),
+			})
+		}
+	}
+	if len(variants) == 0 {
+		index := selection.TrackIndex
+		if index < 0 {
+			index = 0
+		}
+		variants = append(variants, hlsAudioVariant{
+			TrackIndex: index,
+			Language:   strings.TrimSpace(selection.PreferredLanguage),
+			Codec:      strings.TrimSpace(selection.SourceCodec),
+		})
+	}
+
+	defaultIndex := 0
+	for i, variant := range variants {
+		if selection.TrackIndex >= 0 && variant.TrackIndex == selection.TrackIndex {
+			defaultIndex = i
+			break
+		}
+		if selection.PreferredLanguage != "" && languageMatches(variant.Language, selection.PreferredLanguage) {
+			defaultIndex = i
+			break
+		}
+	}
+
+	nameCounts := make(map[string]int)
+	for i := range variants {
+		name := variantDisplayName(variants[i].Language, variants[i].TrackIndex)
+		nameCounts[name]++
+		if nameCounts[name] > 1 {
+			name = fmt.Sprintf("%s %d", name, nameCounts[name])
+		}
+		filename := hlsAudioFilename(name)
+		if filename == "" {
+			filename = fmt.Sprintf("audio_%d.m3u8", i+1)
+		}
+		variants[i].Name = name
+		variants[i].PlaylistFilename = filename
+		variants[i].Default = i == defaultIndex
+	}
+
+	return variants
+}
+
+func (tm *TranscodingManager) lookupAudioStreams(item MediaItem) []AudioStream {
+	var nfo *NFO
+	if tm.store != nil {
+		if stored, ok, err := tm.store.GetNFOExtended(item.ID); err == nil && ok {
+			nfo = stored
+		}
+	}
+	if nfo == nil && item.NFOPath != "" {
+		if parsed, err := ParseNFOFile(item.NFOPath); err == nil {
+			nfo = parsed
+		}
+	}
+	if nfo == nil || nfo.StreamDetails == nil || len(nfo.StreamDetails.Audio) == 0 {
+		return nil
+	}
+	return nfo.StreamDetails.Audio
+}
+
+func variantDisplayName(language string, index int) string {
+	if strings.TrimSpace(language) != "" {
+		return strings.ToUpper(strings.TrimSpace(language))
+	}
+	return fmt.Sprintf("Audio %d", index+1)
+}
+
+func hlsAudioFilename(name string) string {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	if normalized == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range normalized {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			continue
+		}
+		if r == ' ' || r == '-' || r == '_' {
+			b.WriteRune('_')
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return fmt.Sprintf("audio_%s.m3u8", b.String())
+}
+
+func writeHLSMasterPlaylist(path string, profile TranscodingProfile, videoPlaylist string, audioVariants []hlsAudioVariant) error {
+	var builder strings.Builder
+	builder.WriteString("#EXTM3U\n")
+	builder.WriteString("#EXT-X-VERSION:3\n")
+
+	if len(audioVariants) > 0 {
+		for _, variant := range audioVariants {
+			line := fmt.Sprintf("#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"%s\"", variant.Name)
+			if variant.Language != "" {
+				line += fmt.Sprintf(",LANGUAGE=\"%s\"", strings.ToLower(variant.Language))
+			}
+			if variant.Default {
+				line += ",DEFAULT=YES,AUTOSELECT=YES"
+			} else {
+				line += ",DEFAULT=NO,AUTOSELECT=YES"
+			}
+			line += fmt.Sprintf(",URI=\"%s\"", variant.PlaylistFilename)
+			builder.WriteString(line)
+			builder.WriteString("\n")
+		}
+	}
+
+	bandwidth := profile.MaxBitrate
+	if bandwidth <= 0 {
+		bandwidth = 2_000_000
+	}
+	if len(audioVariants) > 0 {
+		bandwidth += int64(len(audioVariants)) * 128_000
+	}
+
+	streamLine := fmt.Sprintf("#EXT-X-STREAM-INF:BANDWIDTH=%d", bandwidth)
+	if profile.Resolution != "" {
+		streamLine += fmt.Sprintf(",RESOLUTION=%s", profile.Resolution)
+	}
+	if len(audioVariants) > 0 {
+		streamLine += ",AUDIO=\"audio\""
+	}
+	builder.WriteString(streamLine)
+	builder.WriteString("\n")
+	builder.WriteString(videoPlaylist)
+	builder.WriteString("\n")
+
+	return os.WriteFile(path, []byte(builder.String()), 0644)
+}
+
+func hlsBasePath(requestPath string) string {
+	if strings.HasSuffix(requestPath, "stream.m3u8") {
+		return strings.TrimSuffix(requestPath, "stream.m3u8") + "stream/"
+	}
+	if strings.HasSuffix(requestPath, ".m3u8") {
+		return path.Dir(requestPath) + "/"
+	}
+	return path.Dir(requestPath) + "/"
+}
+
+func rewriteHLSPlaylist(content []byte, basePath, rawQuery string) []byte {
+	scanner := bufio.NewScanner(strings.NewReader(string(content)))
+	var builder strings.Builder
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#EXT-X-MEDIA") {
+			builder.WriteString(rewriteHLSMediaLine(line, basePath, rawQuery))
+			builder.WriteString("\n")
+			continue
+		}
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			builder.WriteString(line)
+			builder.WriteString("\n")
+			continue
+		}
+		builder.WriteString(mapHLSURI(trimmed, basePath, rawQuery))
+		builder.WriteString("\n")
+	}
+	return []byte(builder.String())
+}
+
+func rewriteHLSMediaLine(line, basePath, rawQuery string) string {
+	start := strings.Index(line, "URI=\"")
+	if start == -1 {
+		return line
+	}
+	start += len("URI=\"")
+	end := strings.Index(line[start:], "\"")
+	if end == -1 {
+		return line
+	}
+	uri := line[start : start+end]
+	mapped := mapHLSURI(uri, basePath, rawQuery)
+	return line[:start] + mapped + line[start+end:]
+}
+
+func mapHLSURI(uri, basePath, rawQuery string) string {
+	if uri == "" {
+		return uri
+	}
+	if strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://") || strings.HasPrefix(uri, "/") {
+		return uri
+	}
+	mapped := basePath + uri
+	if rawQuery != "" && !strings.Contains(mapped, "?") {
+		mapped += "?" + rawQuery
+	}
+	return mapped
 }

@@ -27,6 +27,8 @@ type TranscodeOptions struct {
 	Container          string
 	StartTime          float64 // in seconds
 	Duration           float64 // in seconds (0 = until end)
+	DisableVideo       bool
+	DisableAudio       bool
 }
 
 // TranscodeResult contains information about the transcoding result
@@ -85,45 +87,53 @@ func buildTranscodeArgs(opts TranscodeOptions) []string {
 		args = append(args, "-t", fmt.Sprintf("%.2f", opts.Duration))
 	}
 
-	args = appendAudioMapArgs(args, opts)
-
 	// Video codec
-	if opts.VideoCodec == "copy" {
-		args = append(args, "-c:v", "copy")
+	if opts.DisableVideo {
+		args = append(args, "-vn")
 	} else {
-		args = append(args, "-c:v", opts.VideoCodec)
+		if opts.VideoCodec == "copy" {
+			args = append(args, "-c:v", "copy")
+		} else {
+			args = append(args, "-c:v", opts.VideoCodec)
 
-		// Resolution
-		if opts.Resolution != "" {
-			args = append(args, "-s", opts.Resolution)
-		}
+			// Resolution
+			if opts.Resolution != "" {
+				args = append(args, "-s", opts.Resolution)
+			}
 
-		// Bitrate
-		if opts.MaxBitrate > 0 {
-			bitrateStr := fmt.Sprintf("%dk", opts.MaxBitrate/1000)
-			args = append(args, "-b:v", bitrateStr)
-			args = append(args, "-maxrate", bitrateStr)
-			bufsize := opts.MaxBitrate * 2 / 1000
-			args = append(args, "-bufsize", fmt.Sprintf("%dk", bufsize))
-		}
+			// Bitrate
+			if opts.MaxBitrate > 0 {
+				bitrateStr := fmt.Sprintf("%dk", opts.MaxBitrate/1000)
+				args = append(args, "-b:v", bitrateStr)
+				args = append(args, "-maxrate", bitrateStr)
+				bufsize := opts.MaxBitrate * 2 / 1000
+				args = append(args, "-bufsize", fmt.Sprintf("%dk", bufsize))
+			}
 
-		// Preset for x264/x265
-		if strings.Contains(opts.VideoCodec, "264") || strings.Contains(opts.VideoCodec, "265") {
-			args = append(args, "-preset", "veryfast")
+			// Preset for x264/x265
+			if strings.Contains(opts.VideoCodec, "264") || strings.Contains(opts.VideoCodec, "265") {
+				args = append(args, "-preset", "veryfast")
+			}
 		}
 	}
 
+	args = appendMapArgs(args, opts)
+
 	// Audio codec
-	if opts.AudioCodec == "copy" {
-		args = append(args, "-c:a", "copy")
+	if opts.DisableAudio {
+		args = append(args, "-an")
 	} else {
-		args = append(args, "-c:a", opts.AudioCodec)
-		if opts.AudioBitrateKbps > 0 {
-			args = append(args, "-b:a", fmt.Sprintf("%dk", opts.AudioBitrateKbps))
-		} else if opts.AudioCodec == "aac" {
-			args = append(args, "-b:a", "128k")
+		if opts.AudioCodec == "copy" {
+			args = append(args, "-c:a", "copy")
+		} else {
+			args = append(args, "-c:a", opts.AudioCodec)
+			if opts.AudioBitrateKbps > 0 {
+				args = append(args, "-b:a", fmt.Sprintf("%dk", opts.AudioBitrateKbps))
+			} else if opts.AudioCodec == "aac" {
+				args = append(args, "-b:a", "128k")
+			}
+			args = appendAudioProcessingArgs(args, opts)
 		}
-		args = appendAudioProcessingArgs(args, opts)
 	}
 
 	// Container-specific options
@@ -189,50 +199,58 @@ func buildHLSArgs(opts TranscodeOptions, segmentDuration int) []string {
 		args = append(args, "-t", fmt.Sprintf("%.2f", opts.Duration))
 	}
 
-	args = appendAudioMapArgs(args, opts)
-
 	// Video codec
-	if opts.VideoCodec == "copy" {
-		args = append(args, "-c:v", "copy")
+	if opts.DisableVideo {
+		args = append(args, "-vn")
 	} else {
-		args = append(args, "-c:v", opts.VideoCodec)
+		if opts.VideoCodec == "copy" {
+			args = append(args, "-c:v", "copy")
+		} else {
+			args = append(args, "-c:v", opts.VideoCodec)
 
-		// Resolution
-		if opts.Resolution != "" {
-			args = append(args, "-s", opts.Resolution)
+			// Resolution
+			if opts.Resolution != "" {
+				args = append(args, "-s", opts.Resolution)
+			}
+
+			// Bitrate
+			if opts.MaxBitrate > 0 {
+				bitrateStr := fmt.Sprintf("%dk", opts.MaxBitrate/1000)
+				args = append(args, "-b:v", bitrateStr)
+				args = append(args, "-maxrate", bitrateStr)
+				bufsize := opts.MaxBitrate * 2 / 1000
+				args = append(args, "-bufsize", fmt.Sprintf("%dk", bufsize))
+			}
+
+			// Preset for x264/x265
+			if strings.Contains(opts.VideoCodec, "264") || strings.Contains(opts.VideoCodec, "265") {
+				args = append(args, "-preset", "veryfast")
+			}
+
+			// GOP size for HLS
+			args = append(args, "-g", strconv.Itoa(segmentDuration*30)) // Assuming 30fps
+			args = append(args, "-keyint_min", strconv.Itoa(segmentDuration*30))
+			args = append(args, "-sc_threshold", "0")
 		}
-
-		// Bitrate
-		if opts.MaxBitrate > 0 {
-			bitrateStr := fmt.Sprintf("%dk", opts.MaxBitrate/1000)
-			args = append(args, "-b:v", bitrateStr)
-			args = append(args, "-maxrate", bitrateStr)
-			bufsize := opts.MaxBitrate * 2 / 1000
-			args = append(args, "-bufsize", fmt.Sprintf("%dk", bufsize))
-		}
-
-		// Preset for x264/x265
-		if strings.Contains(opts.VideoCodec, "264") || strings.Contains(opts.VideoCodec, "265") {
-			args = append(args, "-preset", "veryfast")
-		}
-
-		// GOP size for HLS
-		args = append(args, "-g", strconv.Itoa(segmentDuration*30)) // Assuming 30fps
-		args = append(args, "-keyint_min", strconv.Itoa(segmentDuration*30))
-		args = append(args, "-sc_threshold", "0")
 	}
 
+	args = appendMapArgs(args, opts)
+
 	// Audio codec
-	if opts.AudioCodec == "copy" {
-		args = append(args, "-c:a", "copy")
+	if opts.DisableAudio {
+		args = append(args, "-an")
 	} else {
-		args = append(args, "-c:a", opts.AudioCodec)
-		if opts.AudioBitrateKbps > 0 {
-			args = append(args, "-b:a", fmt.Sprintf("%dk", opts.AudioBitrateKbps))
-		} else if opts.AudioCodec == "aac" {
-			args = append(args, "-b:a", "128k")
+		if opts.AudioCodec == "copy" {
+			args = append(args, "-c:a", "copy")
+		} else {
+			args = append(args, "-c:a", opts.AudioCodec)
+			if opts.AudioBitrateKbps > 0 {
+				args = append(args, "-b:a", fmt.Sprintf("%dk", opts.AudioBitrateKbps))
+			} else if opts.AudioCodec == "aac" {
+				args = append(args, "-b:a", "128k")
+			}
+			args = appendAudioProcessingArgs(args, opts)
 		}
-		args = appendAudioProcessingArgs(args, opts)
 	}
 
 	// HLS-specific options
@@ -254,14 +272,28 @@ func buildHLSArgs(opts TranscodeOptions, segmentDuration int) []string {
 	return args
 }
 
-func appendAudioMapArgs(args []string, opts TranscodeOptions) []string {
+func appendMapArgs(args []string, opts TranscodeOptions) []string {
+	if opts.DisableVideo && opts.DisableAudio {
+		return args
+	}
+	if opts.DisableVideo {
+		if opts.AudioTrackIndex >= 0 {
+			return append(args, "-map", fmt.Sprintf("0:a:%d", opts.AudioTrackIndex))
+		}
+		if opts.PreferredLanguage != "" {
+			return append(args, "-map", fmt.Sprintf("0:a:m:language:%s", opts.PreferredLanguage))
+		}
+		return append(args, "-map", "0:a:0")
+	}
+	if opts.DisableAudio {
+		return append(args, "-map", "0:v:0")
+	}
 	if opts.AudioTrackIndex >= 0 || opts.PreferredLanguage != "" {
 		args = append(args, "-map", "0:v:0")
 		if opts.AudioTrackIndex >= 0 {
-			args = append(args, "-map", fmt.Sprintf("0:a:%d", opts.AudioTrackIndex))
-			return args
+			return append(args, "-map", fmt.Sprintf("0:a:%d", opts.AudioTrackIndex))
 		}
-		args = append(args, "-map", fmt.Sprintf("0:a:m:language:%s", opts.PreferredLanguage))
+		return append(args, "-map", fmt.Sprintf("0:a:m:language:%s", opts.PreferredLanguage))
 	}
 	return args
 }
