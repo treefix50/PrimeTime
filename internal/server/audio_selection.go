@@ -8,6 +8,7 @@ import (
 type AudioSelection struct {
 	TrackIndex        int
 	PreferredLanguage string
+	SourceCodec       string
 }
 
 func selectAudioSelection(profile TranscodingProfile, item MediaItem, store MediaStore) AudioSelection {
@@ -36,6 +37,9 @@ func selectAudioSelection(profile TranscodingProfile, item MediaItem, store Medi
 		selection.TrackIndex = index
 		if language != "" {
 			selection.PreferredLanguage = language
+		}
+		if index < len(nfo.StreamDetails.Audio) {
+			selection.SourceCodec = nfo.StreamDetails.Audio[index].Codec
 		}
 	}
 
