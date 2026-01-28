@@ -17,6 +17,8 @@ type TranscodeOptions struct {
 	VideoCodec        string
 	AudioCodec        string
 	AudioTrackIndex   int
+	AudioChannels     int
+	AudioLayout       string
 	PreferredLanguage string
 	Resolution        string
 	MaxBitrate        int64
@@ -117,6 +119,7 @@ func buildTranscodeArgs(opts TranscodeOptions) []string {
 		if opts.AudioCodec == "aac" {
 			args = append(args, "-b:a", "128k")
 		}
+		args = appendAudioChannelArgs(args, opts)
 	}
 
 	// Container-specific options
@@ -223,6 +226,7 @@ func buildHLSArgs(opts TranscodeOptions, segmentDuration int) []string {
 		if opts.AudioCodec == "aac" {
 			args = append(args, "-b:a", "128k")
 		}
+		args = appendAudioChannelArgs(args, opts)
 	}
 
 	// HLS-specific options
@@ -252,6 +256,16 @@ func appendAudioMapArgs(args []string, opts TranscodeOptions) []string {
 			return args
 		}
 		args = append(args, "-map", fmt.Sprintf("0:a:m:language:%s", opts.PreferredLanguage))
+	}
+	return args
+}
+
+func appendAudioChannelArgs(args []string, opts TranscodeOptions) []string {
+	if opts.AudioChannels > 0 {
+		args = append(args, "-ac", strconv.Itoa(opts.AudioChannels))
+	}
+	if strings.TrimSpace(opts.AudioLayout) != "" {
+		args = append(args, "-af", fmt.Sprintf("pan=%s", opts.AudioLayout))
 	}
 	return args
 }

@@ -237,6 +237,7 @@ var migrations = []migration{
 				audio_codec TEXT NOT NULL,
 				resolution TEXT,
 				max_bitrate INTEGER,
+				audio_layout TEXT,
 				container TEXT NOT NULL DEFAULT 'mp4',
 				created_at INTEGER NOT NULL
 			);`,
@@ -433,6 +434,12 @@ var migrations = []migration{
 			`ALTER TABLE transcoding_profiles ADD COLUMN preferred_languages TEXT;`,
 			`UPDATE transcoding_profiles SET supported_audio_codecs = audio_codec
 			 WHERE supported_audio_codecs IS NULL OR supported_audio_codecs = '';`,
+		},
+	},
+	{
+		version: 13,
+		statements: []string{
+			`ALTER TABLE transcoding_profiles ADD COLUMN audio_layout TEXT;`,
 		},
 	},
 }

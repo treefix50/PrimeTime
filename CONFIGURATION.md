@@ -90,3 +90,26 @@ Die Werte sind auf einen ausgewogenen Mix aus Performance und Sicherheit ausgele
 an die lokale Hardware oder sehr große Bibliotheken angepasst werden.
 
 **Wichtig:** FFmpeg muss manuell unter `tools/ffmpeg/` installiert werden. Es gibt keinen automatischen Download.
+
+## Audio-Downmixing für Transcoding-Profile
+
+Für Transcoding-Profile lässt sich die Kanalanzahl und optional ein Downmix-Pan-Filter konfigurieren.
+PrimeTime setzt dafür bei Bedarf `-ac <n>` und `-af pan=<layout>` in den FFmpeg-Argumenten.
+
+Relevante Felder im Transcoding-Profil (API `POST /transcoding/profiles`):
+
+* `maxAudioChannels`: Maximale Kanalanzahl für den Client. Stereo-Clients sollten hier `2` setzen (ergibt `-ac 2`).
+* `audioLayout`: Optionales Pan-Layout für den Downmix. Der Wert wird direkt hinter `pan=` gesetzt.
+
+Beispiel (Stereo-Downmix mit explizitem Pan-Layout):
+
+```json
+{
+  "name": "stereo-client",
+  "videoCodec": "libx264",
+  "audioCodec": "aac",
+  "maxAudioChannels": 2,
+  "audioLayout": "stereo|c0=FL+0.707*FC+0.707*BL|c1=FR+0.707*FC+0.707*BR",
+  "container": "mp4"
+}
+```
