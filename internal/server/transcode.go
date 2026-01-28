@@ -68,7 +68,7 @@ func NewTranscodingManager(ffmpegPath, cacheDir string, store MediaStore) *Trans
 }
 
 // StartTranscoding starts a transcoding job
-func (tm *TranscodingManager) StartTranscoding(mediaID, profileID string, item MediaItem, profile TranscodingProfile) (*TranscodingJob, error) {
+func (tm *TranscodingManager) StartTranscoding(mediaID, profileID string, item MediaItem, profile TranscodingProfile, selection AudioSelection) (*TranscodingJob, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -126,25 +126,27 @@ func (tm *TranscodingManager) StartTranscoding(mediaID, profileID string, item M
 	tm.activeJobs[jobID] = job
 
 	// Start transcoding in background
-	go tm.runTranscoding(job, item, profile, outputPath)
+	go tm.runTranscoding(job, item, profile, selection, outputPath)
 
 	return job, nil
 }
 
 // runTranscoding executes the transcoding process
-func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem, profile TranscodingProfile, outputPath string) {
+func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem, profile TranscodingProfile, selection AudioSelection, outputPath string) {
 	tm.mu.Lock()
 	job.Status = "running"
 	tm.mu.Unlock()
 
 	opts := ffmpeg.TranscodeOptions{
-		InputPath:  item.VideoPath,
-		OutputPath: outputPath,
-		VideoCodec: profile.VideoCodec,
-		AudioCodec: profile.AudioCodec,
-		Resolution: profile.Resolution,
-		MaxBitrate: profile.MaxBitrate,
-		Container:  profile.Container,
+		InputPath:         item.VideoPath,
+		OutputPath:        outputPath,
+		VideoCodec:        profile.VideoCodec,
+		AudioCodec:        profile.AudioCodec,
+		AudioTrackIndex:   selection.TrackIndex,
+		PreferredLanguage: selection.PreferredLanguage,
+		Resolution:        profile.Resolution,
+		MaxBitrate:        profile.MaxBitrate,
+		Container:         profile.Container,
 	}
 
 	result, err := ffmpeg.Transcode(job.ctx, tm.ffmpegPath, opts)
@@ -237,7 +239,7 @@ func (tm *TranscodingManager) CleanupOldCache() error {
 }
 
 // StartHLSTranscoding starts HLS transcoding for adaptive streaming
-func (tm *TranscodingManager) StartHLSTranscoding(mediaID, profileID string, item MediaItem, profile TranscodingProfile) (*TranscodingJob, error) {
+func (tm *TranscodingManager) StartHLSTranscoding(mediaID, profileID string, item MediaItem, profile TranscodingProfile, selection AudioSelection) (*TranscodingJob, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
@@ -276,25 +278,27 @@ func (tm *TranscodingManager) StartHLSTranscoding(mediaID, profileID string, ite
 	tm.activeJobs[jobID] = job
 
 	// Start HLS transcoding in background
-	go tm.runHLSTranscoding(job, item, profile, playlistPath)
+	go tm.runHLSTranscoding(job, item, profile, selection, playlistPath)
 
 	return job, nil
 }
 
 // runHLSTranscoding executes the HLS transcoding process
-func (tm *TranscodingManager) runHLSTranscoding(job *TranscodingJob, item MediaItem, profile TranscodingProfile, playlistPath string) {
+func (tm *TranscodingManager) runHLSTranscoding(job *TranscodingJob, item MediaItem, profile TranscodingProfile, selection AudioSelection, playlistPath string) {
 	tm.mu.Lock()
 	job.Status = "running"
 	tm.mu.Unlock()
 
 	opts := ffmpeg.TranscodeOptions{
-		InputPath:  item.VideoPath,
-		OutputPath: playlistPath,
-		VideoCodec: profile.VideoCodec,
-		AudioCodec: profile.AudioCodec,
-		Resolution: profile.Resolution,
-		MaxBitrate: profile.MaxBitrate,
-		Container:  "mpegts", // HLS uses MPEG-TS segments
+		InputPath:         item.VideoPath,
+		OutputPath:        playlistPath,
+		VideoCodec:        profile.VideoCodec,
+		AudioCodec:        profile.AudioCodec,
+		AudioTrackIndex:   selection.TrackIndex,
+		PreferredLanguage: selection.PreferredLanguage,
+		Resolution:        profile.Resolution,
+		MaxBitrate:        profile.MaxBitrate,
+		Container:         "mpegts", // HLS uses MPEG-TS segments
 	}
 
 	result, err := ffmpeg.TranscodeToHLS(job.ctx, tm.ffmpegPath, opts, 6)

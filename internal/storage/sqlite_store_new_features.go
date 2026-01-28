@@ -202,10 +202,19 @@ func (s *Store) CreateTranscodingProfile(profile server.TranscodingProfile) erro
 		return fmt.Errorf("storage: missing database connection")
 	}
 	_, err := s.db.Exec(`
-		INSERT INTO transcoding_profiles (id, name, video_codec, audio_codec, resolution, max_bitrate, container, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO transcoding_profiles (
+			id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
+			preferred_languages, resolution, max_bitrate, container, created_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, profile.ID, profile.Name, profile.VideoCodec, profile.AudioCodec,
-		nullString(profile.Resolution), nullInt64(profile.MaxBitrate), profile.Container, profile.CreatedAt.Unix())
+		nullString(joinStringList(profile.SupportedAudioCodecs)),
+		nullInt64(int64(profile.MaxAudioChannels)),
+		nullString(joinStringList(profile.PreferredLanguages)),
+		nullString(profile.Resolution),
+		nullInt64(profile.MaxBitrate),
+		profile.Container,
+		profile.CreatedAt.Unix())
 	return err
 }
 
@@ -217,13 +226,18 @@ func (s *Store) GetTranscodingProfile(id string) (*server.TranscodingProfile, bo
 	var profile server.TranscodingProfile
 	var resolution sql.NullString
 	var maxBitrate sql.NullInt64
+	var supportedAudioCodecs sql.NullString
+	var preferredLanguages sql.NullString
+	var maxAudioChannels sql.NullInt64
 	var createdAt int64
 
 	err := s.db.QueryRow(`
-		SELECT id, name, video_codec, audio_codec, resolution, max_bitrate, container, created_at
+		SELECT id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
+			preferred_languages, resolution, max_bitrate, container, created_at
 		FROM transcoding_profiles
 		WHERE id = ?
 	`, id).Scan(&profile.ID, &profile.Name, &profile.VideoCodec, &profile.AudioCodec,
+		&supportedAudioCodecs, &maxAudioChannels, &preferredLanguages,
 		&resolution, &maxBitrate, &profile.Container, &createdAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -238,6 +252,11 @@ func (s *Store) GetTranscodingProfile(id string) (*server.TranscodingProfile, bo
 	if maxBitrate.Valid {
 		profile.MaxBitrate = maxBitrate.Int64
 	}
+	if maxAudioChannels.Valid {
+		profile.MaxAudioChannels = int(maxAudioChannels.Int64)
+	}
+	profile.SupportedAudioCodecs = splitStringList(supportedAudioCodecs)
+	profile.PreferredLanguages = splitStringList(preferredLanguages)
 	profile.CreatedAt = time.Unix(createdAt, 0)
 	return &profile, true, nil
 }
@@ -250,13 +269,18 @@ func (s *Store) GetTranscodingProfileByName(name string) (*server.TranscodingPro
 	var profile server.TranscodingProfile
 	var resolution sql.NullString
 	var maxBitrate sql.NullInt64
+	var supportedAudioCodecs sql.NullString
+	var preferredLanguages sql.NullString
+	var maxAudioChannels sql.NullInt64
 	var createdAt int64
 
 	err := s.db.QueryRow(`
-		SELECT id, name, video_codec, audio_codec, resolution, max_bitrate, container, created_at
+		SELECT id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
+			preferred_languages, resolution, max_bitrate, container, created_at
 		FROM transcoding_profiles
 		WHERE name = ?
 	`, name).Scan(&profile.ID, &profile.Name, &profile.VideoCodec, &profile.AudioCodec,
+		&supportedAudioCodecs, &maxAudioChannels, &preferredLanguages,
 		&resolution, &maxBitrate, &profile.Container, &createdAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -271,6 +295,11 @@ func (s *Store) GetTranscodingProfileByName(name string) (*server.TranscodingPro
 	if maxBitrate.Valid {
 		profile.MaxBitrate = maxBitrate.Int64
 	}
+	if maxAudioChannels.Valid {
+		profile.MaxAudioChannels = int(maxAudioChannels.Int64)
+	}
+	profile.SupportedAudioCodecs = splitStringList(supportedAudioCodecs)
+	profile.PreferredLanguages = splitStringList(preferredLanguages)
 	profile.CreatedAt = time.Unix(createdAt, 0)
 	return &profile, true, nil
 }
@@ -281,7 +310,8 @@ func (s *Store) GetAllTranscodingProfiles() ([]server.TranscodingProfile, error)
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, name, video_codec, audio_codec, resolution, max_bitrate, container, created_at
+		SELECT id, name, video_codec, audio_codec, supported_audio_codecs, max_audio_channels,
+			preferred_languages, resolution, max_bitrate, container, created_at
 		FROM transcoding_profiles
 		ORDER BY name
 	`)
@@ -295,9 +325,13 @@ func (s *Store) GetAllTranscodingProfiles() ([]server.TranscodingProfile, error)
 		var profile server.TranscodingProfile
 		var resolution sql.NullString
 		var maxBitrate sql.NullInt64
+		var supportedAudioCodecs sql.NullString
+		var preferredLanguages sql.NullString
+		var maxAudioChannels sql.NullInt64
 		var createdAt int64
 
 		if err := rows.Scan(&profile.ID, &profile.Name, &profile.VideoCodec, &profile.AudioCodec,
+			&supportedAudioCodecs, &maxAudioChannels, &preferredLanguages,
 			&resolution, &maxBitrate, &profile.Container, &createdAt); err != nil {
 			return nil, err
 		}
@@ -308,6 +342,11 @@ func (s *Store) GetAllTranscodingProfiles() ([]server.TranscodingProfile, error)
 		if maxBitrate.Valid {
 			profile.MaxBitrate = maxBitrate.Int64
 		}
+		if maxAudioChannels.Valid {
+			profile.MaxAudioChannels = int(maxAudioChannels.Int64)
+		}
+		profile.SupportedAudioCodecs = splitStringList(supportedAudioCodecs)
+		profile.PreferredLanguages = splitStringList(preferredLanguages)
 		profile.CreatedAt = time.Unix(createdAt, 0)
 		profiles = append(profiles, profile)
 	}
@@ -1025,4 +1064,38 @@ func (s *Store) GetNextUnwatchedEpisode(showID, userID string) (*server.Episode,
 	}
 	episode.CreatedAt = time.Unix(createdAt, 0)
 	return &episode, true, nil
+}
+
+func joinStringList(values []string) string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return ""
+	}
+	return strings.Join(normalized, ",")
+}
+
+func splitStringList(value sql.NullString) []string {
+	if !value.Valid {
+		return nil
+	}
+	parts := strings.Split(value.String, ",")
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		normalized = append(normalized, part)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }

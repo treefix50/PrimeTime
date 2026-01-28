@@ -425,6 +425,16 @@ var migrations = []migration{
 			`CREATE INDEX IF NOT EXISTS idx_nfo_stream_subtitle_media_id ON nfo_stream_subtitle(media_id);`,
 		},
 	},
+	{
+		version: 12,
+		statements: []string{
+			`ALTER TABLE transcoding_profiles ADD COLUMN supported_audio_codecs TEXT;`,
+			`ALTER TABLE transcoding_profiles ADD COLUMN max_audio_channels INTEGER;`,
+			`ALTER TABLE transcoding_profiles ADD COLUMN preferred_languages TEXT;`,
+			`UPDATE transcoding_profiles SET supported_audio_codecs = audio_codec
+			 WHERE supported_audio_codecs IS NULL OR supported_audio_codecs = '';`,
+		},
+	},
 }
 
 func (s *Store) EnsureSchema() error {
