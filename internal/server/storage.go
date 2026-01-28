@@ -184,6 +184,7 @@ type TranscodingProfile struct {
 	SupportedAudioCodecs []string  `json:"supportedAudioCodecs,omitempty"`
 	MaxAudioChannels     int       `json:"maxAudioChannels,omitempty"`
 	AudioLayout          string    `json:"audioLayout,omitempty"`
+	AudioNormalization   string    `json:"audioNormalization,omitempty"`
 	PreferredLanguages   []string  `json:"preferredLanguages,omitempty"`
 	Resolution           string    `json:"resolution,omitempty"`
 	MaxBitrate           int64     `json:"maxBitrate,omitempty"`

@@ -149,18 +149,19 @@ func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem
 	)
 
 	opts := ffmpeg.TranscodeOptions{
-		InputPath:         item.VideoPath,
-		OutputPath:        outputPath,
-		VideoCodec:        profile.VideoCodec,
-		AudioCodec:        audioDecision.Codec,
-		AudioBitrateKbps:  audioDecision.BitrateKbps,
-		AudioTrackIndex:   selection.TrackIndex,
-		AudioChannels:     profile.MaxAudioChannels,
-		AudioLayout:       profile.AudioLayout,
-		PreferredLanguage: selection.PreferredLanguage,
-		Resolution:        profile.Resolution,
-		MaxBitrate:        profile.MaxBitrate,
-		Container:         profile.Container,
+		InputPath:          item.VideoPath,
+		OutputPath:         outputPath,
+		VideoCodec:         profile.VideoCodec,
+		AudioCodec:         audioDecision.Codec,
+		AudioBitrateKbps:   audioDecision.BitrateKbps,
+		AudioTrackIndex:    selection.TrackIndex,
+		AudioChannels:      profile.MaxAudioChannels,
+		AudioLayout:        profile.AudioLayout,
+		AudioNormalization: profile.AudioNormalization,
+		PreferredLanguage:  selection.PreferredLanguage,
+		Resolution:         profile.Resolution,
+		MaxBitrate:         profile.MaxBitrate,
+		Container:          profile.Container,
 	}
 
 	result, err := ffmpeg.Transcode(job.ctx, tm.ffmpegPath, opts)
@@ -314,18 +315,19 @@ func (tm *TranscodingManager) runHLSTranscoding(job *TranscodingJob, item MediaI
 	)
 
 	opts := ffmpeg.TranscodeOptions{
-		InputPath:         item.VideoPath,
-		OutputPath:        playlistPath,
-		VideoCodec:        profile.VideoCodec,
-		AudioCodec:        audioDecision.Codec,
-		AudioBitrateKbps:  audioDecision.BitrateKbps,
-		AudioTrackIndex:   selection.TrackIndex,
-		AudioChannels:     profile.MaxAudioChannels,
-		AudioLayout:       profile.AudioLayout,
-		PreferredLanguage: selection.PreferredLanguage,
-		Resolution:        profile.Resolution,
-		MaxBitrate:        profile.MaxBitrate,
-		Container:         "mpegts", // HLS uses MPEG-TS segments
+		InputPath:          item.VideoPath,
+		OutputPath:         playlistPath,
+		VideoCodec:         profile.VideoCodec,
+		AudioCodec:         audioDecision.Codec,
+		AudioBitrateKbps:   audioDecision.BitrateKbps,
+		AudioTrackIndex:    selection.TrackIndex,
+		AudioChannels:      profile.MaxAudioChannels,
+		AudioLayout:        profile.AudioLayout,
+		AudioNormalization: profile.AudioNormalization,
+		PreferredLanguage:  selection.PreferredLanguage,
+		Resolution:         profile.Resolution,
+		MaxBitrate:         profile.MaxBitrate,
+		Container:          "mpegts", // HLS uses MPEG-TS segments
 	}
 
 	result, err := ffmpeg.TranscodeToHLS(job.ctx, tm.ffmpegPath, opts, 6)
