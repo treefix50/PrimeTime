@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -507,9 +508,41 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, r, item)
 
 	case "stream":
-		// /items/{id}/stream  OR  /items/{id}/stream.m3u8
+		// /items/{id}/stream  OR  /items/{id}/stream/{asset}
 		if r.Method != http.MethodGet {
 			s.methodNotAllowed(w)
+			return
+		}
+
+		if len(parts) >= 3 {
+			if s.lib.store == nil {
+				s.writeError(w, "HLS not available without database", http.StatusNotImplemented)
+				return
+			}
+			profileName := strings.TrimSpace(r.URL.Query().Get("profile"))
+			if profileName == "" {
+				profileName = "720p"
+			}
+			profile, ok, err := s.lib.store.GetTranscodingProfileByName(profileName)
+			if err != nil {
+				s.writeError(w, errInternal, http.StatusInternalServerError)
+				return
+			}
+			if !ok {
+				s.writeError(w, "profile not found", http.StatusNotFound)
+				return
+			}
+			asset := path.Clean(strings.Join(parts[2:], "/"))
+			if strings.HasPrefix(asset, "/") || strings.Contains(asset, "..") {
+				s.writeError(w, errBadRequest, http.StatusBadRequest)
+				return
+			}
+			hlsPath := filepath.Join(s.transcodingMgr.cacheDir, "hls", item.ID, profile.ID, asset)
+			if strings.HasSuffix(asset, ".m3u8") {
+				s.transcodingMgr.ServeHLSPlaylist(w, r, hlsPath)
+				return
+			}
+			s.transcodingMgr.ServeHLSSegment(w, r, hlsPath)
 			return
 		}
 
@@ -532,6 +565,17 @@ func (s *Server) handleItems(w http.ResponseWriter, r *http.Request) {
 
 		// Serve original file
 		ServeVideoFile(w, r, item.VideoPath)
+
+	case "stream.m3u8":
+		if r.Method != http.MethodGet {
+			s.methodNotAllowed(w)
+			return
+		}
+		profileName := strings.TrimSpace(r.URL.Query().Get("profile"))
+		if profileName == "" {
+			profileName = "720p"
+		}
+		s.handleHLSStream(w, r, item, profileName)
 
 	case "nfo":
 		// /items/{id}/nfo  OR  /items/{id}/nfo/raw
