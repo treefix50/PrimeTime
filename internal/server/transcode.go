@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -137,11 +138,22 @@ func (tm *TranscodingManager) runTranscoding(job *TranscodingJob, item MediaItem
 	job.Status = "running"
 	tm.mu.Unlock()
 
+	audioDecision := decideAudioTranscode(profile, selection)
+	log.Printf(
+		"level=info msg=\"audio codec decision\" profile=%s source_codec=%s selected_codec=%s bitrate_kbps=%d note=%q",
+		profile.Name,
+		selection.SourceCodec,
+		audioDecision.Codec,
+		audioDecision.BitrateKbps,
+		audioDecision.DecisionNote,
+	)
+
 	opts := ffmpeg.TranscodeOptions{
 		InputPath:         item.VideoPath,
 		OutputPath:        outputPath,
 		VideoCodec:        profile.VideoCodec,
-		AudioCodec:        profile.AudioCodec,
+		AudioCodec:        audioDecision.Codec,
+		AudioBitrateKbps:  audioDecision.BitrateKbps,
 		AudioTrackIndex:   selection.TrackIndex,
 		AudioChannels:     profile.MaxAudioChannels,
 		AudioLayout:       profile.AudioLayout,
@@ -291,11 +303,22 @@ func (tm *TranscodingManager) runHLSTranscoding(job *TranscodingJob, item MediaI
 	job.Status = "running"
 	tm.mu.Unlock()
 
+	audioDecision := decideAudioTranscode(profile, selection)
+	log.Printf(
+		"level=info msg=\"audio codec decision\" profile=%s source_codec=%s selected_codec=%s bitrate_kbps=%d note=%q",
+		profile.Name,
+		selection.SourceCodec,
+		audioDecision.Codec,
+		audioDecision.BitrateKbps,
+		audioDecision.DecisionNote,
+	)
+
 	opts := ffmpeg.TranscodeOptions{
 		InputPath:         item.VideoPath,
 		OutputPath:        playlistPath,
 		VideoCodec:        profile.VideoCodec,
-		AudioCodec:        profile.AudioCodec,
+		AudioCodec:        audioDecision.Codec,
+		AudioBitrateKbps:  audioDecision.BitrateKbps,
 		AudioTrackIndex:   selection.TrackIndex,
 		AudioChannels:     profile.MaxAudioChannels,
 		AudioLayout:       profile.AudioLayout,
